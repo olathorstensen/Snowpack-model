@@ -82,7 +82,7 @@ def Facet_growth(ix, iy):
 nx = int(depth/dx)
 ny = int((runtime * 60 * 60) / dt)
 x = np.linspace(0, depth*100, nx+1)
-y = np.round( np.arange(0, ny+1, 1) * 200/3600 , 2)                             # Should this be dt/3600?
+y = np.round( np.arange(0, ny+1, 1) * dt/3600 , 2) 
 
 temp = np.zeros([nx+1, ny+1], dtype=float)  # Main snowpack grid
 vp = np.zeros([nx+1, ny+1], dtype=float)    # Vapor pressure grid
