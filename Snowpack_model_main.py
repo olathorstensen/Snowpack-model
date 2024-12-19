@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 ### 1D snowpack temperature simulator ###
-# v1.4
+# v1.5
 #@author: olath
-# Verison update: VPG function
+# Verison update: Facetiness
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -13,12 +13,12 @@ import matplotlib.pyplot as plt
 runtime = 24         # Hours
 dt = 200                 # Time step [seconds] (Must be devisible by 3600)
 depth = 1                # Snow depth from surface [m]
-dx = 0.02               # Dist. interval [m]
-pm = 4                   # USE INTEGERS. Plot multiplier, 1 -> every h, 2 -> every second h
+dx = 0.01               # Dist. interval [m]
+pm = 6                   # USE INTEGERS. Plot multiplier, 1 -> every h, 2 -> every second h
 
 
 ############################    Constants   ############################   
-k = 0.2                  # Thermal conductivity snow [W/m K]
+k = 0.1                  # Thermal conductivity snow [W/m K]
 rho = 200                # density [kg/m3]
 cp = 2090                # Spesific heat ice [J/kg C]
 t0 = 273.15          # Kelvin [K]
@@ -54,7 +54,23 @@ def Vapor_pres_grad(ix, iy):
     
     return vpg
 
-# def Facet_growth_rate(ix, iy):
+def Facet_growth_rate(ix, iy):
+    v = vpg[ix, iy]
+    
+    if v > 5:
+        fgr = 1.0987 * np.log(v) - 1.7452 
+    elif v < -5:
+        fgr = -1 * (1.0987 * np.log(np.abs(v)) - 1.7452)
+    else:
+        fgr = 0 
+        
+    return fgr
+
+def Facet_growth(ix, iy):
+    fg = (fgr[ix, iy] + fgr[ix + 1, iy]) / 2 * dt / 10**6
+    
+    return fg
+    
     
 #########################    Model domain    #########################
  
@@ -64,9 +80,11 @@ ny = int((runtime * 60 * 60) / dt)
 x = np.linspace(0, depth*100, nx+1)
 y = np.round( np.arange(0, ny+1, 1) * 200/3600 , 2)
 
-snow = np.zeros([nx+1,ny+1], dtype=float)  # Main snowpack grid
-vp = np.zeros([nx+1,ny+1], dtype=float)    # Vapor pressure grid
-vpg = np.zeros([nx+1,ny+1], dtype=float)    # Vapor pressure grid
+snow = np.zeros([nx+1, ny+1], dtype=float)  # Main snowpack grid
+vp = np.zeros([nx+1, ny+1], dtype=float)    # Vapor pressure grid
+vpg = np.zeros([nx+1, ny+1], dtype=float)    # Vapor pressure gradient grid
+fgr = np.zeros([nx+1, ny+1], dtype=float)    # Facet growth rate grid
+fg =  np.zeros([nx+1, ny+1], dtype=float)    # Facet growth grid
 
     ## Initial condition
 # Linear ic
@@ -125,12 +143,23 @@ for iy in np.arange(1, ny+1, dtype=int):
         snow[ix, iy] = Heat_diff(ix, iy)
         
 for iy in np.arange(0, ny+1, dtype=int):
-    for ix in np.arange(0, nx, dtype=int):
+    for ix in np.arange(0, nx+1, dtype=int):
         vp[ix, iy] = Vapor_pres(ix, iy, snow[ix, iy])
         
 for iy in np.arange(0, ny+1, dtype=int):
-    for ix in np.arange(0, nx+1, dtype=int):     # Ask Ola about this line. Now I did nx-1 to not have to deal with the bottom of the snow.
+    for ix in np.arange(0, nx, dtype=int):
         vpg[ix, iy] = Vapor_pres_grad(ix, iy)
+        
+for iy in np.arange(0, ny+1, dtype=int):
+    for ix in np.arange(0, nx, dtype=int):
+        fgr[ix, iy] = Facet_growth_rate(ix, iy)
+        
+for iy in np.arange(0, ny+1, dtype=int):
+    for ix in np.arange(0, nx, dtype=int):
+        fg[ix, iy] = Facet_growth(ix, iy)
+
+net_growth = np.sum(fg, axis = 1)
+
 
 ###################################################################
 
@@ -139,8 +168,7 @@ for iy in np.arange(0, ny+1, dtype=int):
 # PLot of results:
 for p in np.arange(0, ny+1, h*pm):
     plt.plot(snow[:,p], x, label= f"Time {y[p]} h") # Plot every whole hour
-
-    
+ 
 plt.gca().invert_yaxis()
 plt.title('Temperature')
 plt.xlabel('Temperature C')
@@ -153,7 +181,7 @@ plt.show()
 for p in np.arange(0, ny+1, h*pm):
     plt.plot(vp[:,p], x, label= f"Time {y[p]} h") # Plot every whole hour
 
-    
+
 plt.gca().invert_yaxis()
 plt.title('Vapor pressure')
 plt.xlabel('vp [mb] ')
@@ -164,11 +192,31 @@ plt.show()
 
 for p in np.arange(0, ny+1, h*pm):
     plt.plot(vpg[:,p], x, label= f"Time {y[p]} h") # Plot every whole hour
-
     
 plt.gca().invert_yaxis()
 plt.title('Vapor pressure gradient')
 plt.xlabel('vpg [mb/m] ')
+plt.ylabel('Depth [cm]')
+plt.legend()
+plt.grid(alpha=0.5)
+plt.show()
+
+
+for p in np.arange(0, ny+1, h*pm):
+    plt.plot(fgr[:,p], x, label= f"Time {y[p]} h") # Plot every whole hour
+    
+plt.gca().invert_yaxis()
+plt.title('Facet growth rate')
+plt.xlabel('Facet growth rate [nm/s] ')
+plt.ylabel('Depth [cm]')
+plt.legend()
+plt.grid(alpha=0.5)
+plt.show()
+
+plt.plot(net_growth, x)
+plt.gca().invert_yaxis()
+plt.title('Net facet growth')
+plt.xlabel('Net growth [mm] ')
 plt.ylabel('Depth [cm]')
 plt.legend()
 plt.grid(alpha=0.5)
