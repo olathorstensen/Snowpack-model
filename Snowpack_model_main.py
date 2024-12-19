@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 ### 1D snowpack temperature simulator ###
 # v1.5
-#@author: olath
+#@author: olathasdf
 # Verison update: Facetiness
 
 import numpy as np
