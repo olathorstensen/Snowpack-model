@@ -1,11 +1,16 @@
 ### 1D snowpack temperature simulator ###
-# v1.7
+# v1.8 
 #@author: Ola Thorstensen and Thor Parmentier
-# Version update: Spin-up feature
+# Version update:
+# - Inplemented parameter for plot depths
+# - Time stamp for plots intervals 
+# - Fixed error in spin-up module regarding unsymmetrical  model runtime and spin-up runtime
+# Comment: Model simulates Scenario 2, but Net facet graph is off at the surface.
 
 
 import numpy as np
 import matplotlib.pyplot as plt
+from datetime import datetime, timedelta
 import plotly.graph_objects as go #Whats this?
 import plotly.express as px       #Whats this?
 from plotly.subplots import make_subplots #Whats this?
@@ -17,10 +22,12 @@ runtime = 24             # Hours
 dt = 120                 # Time step [seconds] (Must be a divisor of 3600)
 depth = 1                # Snow depth from surface [m]
 dx = 0.01                # Dist. interval [m]
-pm = 6                   # USE INTEGERS. Plot multiplier, 1 -> every h, 2 -> every second h
+pm = 2                   # USE INTEGERS. Give hourly plot rate
 b_bc = 0                 # Bottom boundary condition, fixed [C]
-spin_up = 1              # [0] No spin-up, [1] Run spin-up
+
+spin_up = 1            # [0] No spin-up, [1] Run spin-up
 sp_runtime = 24*7        # Spin-up run time [Hours]
+plot_depth = 0.35           # Depth shown in plots [m]
 
 
 ############################    Constants   ############################   
@@ -78,19 +85,23 @@ def Facet_growth(ix, iy):
     
     
 #########################    Model domain    #########################
- 
+
     # Model grid  
 nx = int(depth/dx)
 ny = int((runtime * 60 * 60) / dt)
-x = np.linspace(0, depth*100, nx+1)
-y = np.round( np.arange(0, ny+1, 1) * dt/3600 , 2) 
-
 
 temp = np.zeros([nx+1, ny+1], dtype=float)  # Main snowpack grid
 vp = np.zeros([nx+1, ny+1], dtype=float)    # Vapor pressure grid
 vpg = np.zeros([nx+1, ny+1], dtype=float)    # Vapor pressure gradient grid
 fgr = np.zeros([nx+1, ny+1], dtype=float)    # Facet growth rate grid
 fg =  np.zeros([nx+1, ny+1], dtype=float)    # Facet growth grid
+
+    # Axis and time
+x = np.linspace(0, depth*100, nx+1) # Depth axis
+y = np.round( np.arange(0, ny+1, 1) * dt/3600 , 2) # Time axis
+base_time = datetime.strptime("00:00", "%H:%M")
+y_t = [(base_time + timedelta(hours=hour)).strftime("%H:%M") for hour in y]
+
 
     ## Initial condition
 # Linear ic
@@ -101,6 +112,7 @@ temp[:, 0] = np.round(ic, 4)
 xx = np.linspace(-90, 270, int(h * 24) + 1)
 bc = 9*np.sin(np.deg2rad(xx))-10      #Sinusoidal surface bc
 bc_dummy = np.delete(bc, 0)
+sp_bc = bc
 
 # Extends or crops 24h temperature swings to runtime length
 if runtime > 24:
@@ -108,8 +120,8 @@ if runtime > 24:
         bc = np.concatenate((bc, bc_dummy,), axis=0)
     # add remainder
     if runtime%24 != 0:
-        bc_dummy = bc_dummy[0:(int(runtime%24*h))]
-        bc = np.concatenate((bc, bc_dummy))
+        bc_ext = bc_dummy[0:(int(runtime%24*h))]
+        bc = np.concatenate((bc, bc_ext))
 
 if runtime < 24:
     bc = bc[0:int(runtime*h)+1]  # Crops temp forcing
@@ -134,18 +146,19 @@ print('y', y.shape)
 print('snowpack grid shape', temp.shape)
 
 
+
 #####################     Spin up    ##################### 
 
 if spin_up == 1:
     print('Spin-up initiated. Runtime', sp_runtime, 'hours')
-    sp_bc = bc
+    
     if sp_runtime > 24:
         for i in np.arange(1, int(sp_runtime/24)):
             sp_bc = np.concatenate((sp_bc, bc_dummy,), axis=0)
         # add remainder
         if sp_runtime%24 != 0:
-            bc_dummy = bc_dummy[0:(int(sp_runtime%24*h))]
-            sp_bc = np.concatenate((sp_bc, bc_dummy))
+            sp_bc_ext = bc_dummy[0:(int(sp_runtime%24*h))]
+            sp_bc = np.concatenate((sp_bc, sp_bc_ext))
 
     if sp_runtime < 24:
         sp_bc = bc[0:int(sp_runtime*h)+1]  # Crops temp forcing
@@ -163,7 +176,7 @@ if spin_up == 1:
         for ix in np.arange(1, nx, dtype=int):
             sp_temp[ix, iy] = Heat_flow(ix, iy, sp_temp)
 
-            
+          
     ic = sp_temp[:, -1]
     temp[:,0] = ic
 
@@ -207,20 +220,24 @@ net_growth = np.sum(fg, axis = 1)
 
 
 # PLot of results:
+xticks = np.arange(0,-22,-2)
+pd = int(plot_depth/dx)
+
 for p in np.arange(0, ny+1, h*pm):
-    plt.plot(temp[:,p], x, label= f"Time {y[p]} h") # Plot every whole hour
+    plt.plot(temp[:pd,p], x[:pd], label= f"{y_t[p]}") # Plot every whole hour
  
 plt.gca().invert_yaxis()
 plt.title('Temperature')
 plt.xlabel('Temperature C')
 plt.ylabel('Depth [cm]')
-plt.legend()
+plt.legend(fontsize=8)
 plt.grid(alpha=0.5)
+plt.xticks(xticks)
 plt.show()
 
 
 for p in np.arange(0, ny+1, h*pm):
-    plt.plot(vp[:,p], x, label= f"Time {y[p]} h") # Plot every whole hour
+    plt.plot(vp[:pd,p], x[:pd], label= f"Time {y_t[p]}") # Plot every whole hour
 
 plt.gca().invert_yaxis()
 plt.title('Vapor pressure')
@@ -232,7 +249,7 @@ plt.show()
 
 
 for p in np.arange(0, ny+1, h*pm):
-    plt.plot(vpg[:,p], x, label= f"Time {y[p]} h") # Plot every whole hour
+    plt.plot(vpg[:pd,p], x[:pd], label= f"{y_t[p]}") # Plot every whole hour
     
 plt.gca().invert_yaxis()
 plt.title('Vapor pressure gradient')
@@ -244,7 +261,7 @@ plt.show()
 
 
 for p in np.arange(0, ny+1, h*pm):
-    plt.plot(fgr[:,p], x, label= f"Time {y[p]} h") # Plot every whole hour
+    plt.plot(fgr[:pd,p], x[:pd], label= f"{y_t[p]}") # Plot every whole hour
     
 plt.gca().invert_yaxis()
 plt.title('Facet growth rate')
@@ -254,7 +271,8 @@ plt.legend()
 plt.grid(alpha=0.5)
 plt.show()
 
-plt.plot(net_growth, x)
+
+plt.plot(net_growth[:pd], x[:pd])
 plt.gca().invert_yaxis()
 plt.title('Net facet growth')
 plt.xlabel('Net growth [mm] ')
