@@ -64,50 +64,69 @@ T2_avg = -31            # T2 average temp. [deg C]
 T2_phase = 6600         # T2 phase shift [s]
 
 ###########################    Functions    ###########################
-def Solar_rad(h_angle):
+def Solar_rad(h_angle, iy):
     elevation = mt.degrees(mt.asin(mt.cos(mt.radians(lat))* mt.cos((mt.radians(h_angle)))))
+    solar_array[0,iy] = elevation
+    
     zenith = 90 - elevation
     if elevation > 0:
         radiation = sw_con * mt.cos(mt.radians(zenith))
     else:
         radiation = 0   
     rad_scaled = radiation/sw_rr
+    solar_array[0,iy] = h_angle
+    solar_array[1,iy] = elevation
+    solar_array[2,iy] = zenith
+    solar_array[3,iy] = radiation
+    solar_array[4,iy] = rad_scaled
     return rad_scaled
 
 
 def Solar_extinction(x0,x1,sw):
     # Need depth and scaled solar radiation
     x0 = x0/100 # con. cm -> m
-    x0 = x1/100 # con. cm -> m
+    x1 = x1/100 # con. cm -> m
     sw_joules = sw*dt*(1-mt.exp(-sw_k*depth)) # Radiation convertet to Joules
+    solar_array[5,iy] = sw_joules
     A_sw = sw_joules * sw_k                   # A-term in the SW extinction formula
     sw_partition = ((A_sw/-sw_k) * (mt.exp(-sw_k*x1) - mt.exp(-sw_k*x0)) /cp*mass)
     return sw_partition
 
 
-def Sensible_longwave_heat(t, srf_T):
+def Sensible_longwave_heat(t, srf_T, iy):
     # Need time and surface temperature
+    iy = iy-1
     T1 = -T1_amp * mt.cos( (2*mt.pi/(24*60*60)) * (t-T1_phase)) + T1_avg # Temp air
     T2 = -T2_amp * mt.cos( (2*mt.pi/(24*60*60)) * (t-T2_phase)) + T2_avg # Temp atm
-    T = srf_T
+    T = srf_T    
+    
     heat_flux = T+(C+A*(T1-T) - B*((T+T0)**4 - (T2+T0)**4))/(k/dx)
+    
+    T_array[0,iy] = T1
+    T_array[1,iy] = T2
+    T_array[2,iy] = heat_flux
+    T_array[3,iy] = T
+    
     return heat_flux
 
 
 def Heat_flow(ix, iy, grid, neuman):
     if neuman == 1:
-        if ix == 1:
+        if ix == 0:
             iy = iy-1                                        
-            t1 = ghost_cell[iy-1]
+            t1 = ghost_cell[iy]
             t2 = grid[ix, iy] 
             t3 = grid[ix+1, iy]
             T = t2 + r*((-2 * t2) + t1 + t3) 
+        
+            
         else:
             iy = iy-1                                        
             t1 = grid[ix-1, iy]
             t2 = grid[ix, iy] 
             t3 = grid[ix+1, iy]
-            T = t2 + r*((-2 * t2) + t1 + t3)                           
+            T = t2 + r*((-2 * t2) + t1 + t3)      
+                        
    
         
     else:
@@ -116,6 +135,7 @@ def Heat_flow(ix, iy, grid, neuman):
         t2 = grid[ix, iy] 
         t3 = grid[ix+1, iy]
         T = t2 + r*((-2 * t2) + t1 + t3) 
+   
      
     return T
 
@@ -166,14 +186,16 @@ fg =  np.zeros([nx+1, ny+1], dtype=float)    # Facet growth grid
     # Axis and time
 x = np.linspace(0, depth*100, nx+1) # Depth axis [cm]
 y = np.round(np.arange(0, ny+1, 1) *dt) #/3600) # Time axis in sec (divide by 3600 for h)
+y_sec = y.astype(float)
 y_hours = np.round(np.arange(0, ny+1, 1) *dt/3600)
+
 base_time = datetime.strptime("00:00", "%H:%M")
-y_t = [(base_time + timedelta(hours=hour)).strftime("%H:%M") for hour in y_hours]
+y_t = [(base_time + timedelta(seconds=seconds)).strftime("%H:%M") for seconds in y_sec]
 
 
     # Initial condition
 # Linear ic
-ic = np.linspace(-10, 0, nx+1)
+ic = np.linspace(-16, 0, nx +1)
 temp[:, 0] = np.round(ic, 4)
 
 
@@ -186,6 +208,8 @@ temp[-1,:] = b_bc * np.ones(ny+1, dtype=float)
 # Surface BC    
 ghost_cell = np.zeros([ny+1], dtype=float)
 hour_angle = np.linspace(-180, 180, int(h * 24) + 1)
+solar_array = np.zeros([6,ny+1], dtype=float) # Content: hour angle, elevation, zenith, rad, rad scaled, joules
+T_array = np.zeros([4,ny+1], dtype=float)
 
 
 
@@ -258,42 +282,73 @@ if spin_up == 1:
 #####################     Main Model Loop    ##################### 
 
 for iy in np.arange(1, ny+1, dtype=int):
-    ghost_cell[iy-1] = Sensible_longwave_heat(y[iy], temp[0,iy-1])
+    ghost_cell[iy-1] = Sensible_longwave_heat(y[iy], temp[0,iy-1], iy)
     
     
     for ix in np.arange(0, nx, dtype=int):
-        sw_in = Solar_rad(hour_angle[iy])
-        temp[ix, iy] = Heat_flow(ix, iy, temp, 1) + Solar_extinction(x[ix-1],x[ix],sw_in)
         
+        sw_in = Solar_rad(hour_angle[iy], iy)
         
+        temp[ix, iy] = Heat_flow(ix, iy, temp, 1) + Solar_extinction(x[ix+0],x[ix+1],sw_in) 
         
-    
-        
-        
-for iy in np.arange(0, ny+1, dtype=int):
-    for ix in np.arange(0, nx+1, dtype=int):
-        vp[ix, iy] = Vapor_pressure(ix, iy, temp[ix, iy])
-        
-for iy in np.arange(0, ny+1, dtype=int):
-    for ix in np.arange(0, nx, dtype=int):
-        vpg[ix, iy] = Vapor_pressure_gradient(ix, iy)
-        
-for iy in np.arange(0, ny+1, dtype=int):
-    for ix in np.arange(0, nx, dtype=int):
-        fgr[ix, iy] = Facet_growth_rate(ix, iy)
-        
-for iy in np.arange(0, ny+1, dtype=int):
-    for ix in np.arange(0, nx, dtype=int):
-        fg[ix, iy] = Facet_growth(ix, iy)
 
-net_growth = np.sum(fg, axis = 1)
+
+
+# sw_in = 110
+# iy = 1
+# ix = 0
+
+# ghost_cell[iy-1] = Sensible_longwave_heat(y[iy], temp[0,iy-1], iy)
+# #sw_in = Solar_rad(hour_angle[iy], iy)
+        
+# temp[ix, iy] = Heat_flow(ix, iy, temp, 1) + Solar_extinction(x[ix+0],x[ix+1],sw_in)     
+
+# iy = 1
+# ix = 1
+
+# ghost_cell[iy-1] = Sensible_longwave_heat(y[iy], temp[0,iy-1], iy)
+# #sw_in = Solar_rad(hour_angle[iy], iy)
+        
+# temp[ix, iy] = Heat_flow(ix, iy, temp, 1) + Solar_extinction(x[ix+0],x[ix+1],sw_in)     
+
+       
+# iy = 1
+# ix = 2
+
+# ghost_cell[iy-1] = Sensible_longwave_heat(y[iy], temp[0,iy-1], iy)
+# #sw_in = Solar_rad(hour_angle[iy], iy)
+        
+# temp[ix, iy] = Heat_flow(ix, iy, temp, 1) + Solar_extinction(x[ix+0],x[ix+1],sw_in)        
+        
+    
+        
+    
+        
+        
+# for iy in np.arange(0, ny+1, dtype=int):
+#     for ix in np.arange(0, nx+1, dtype=int):
+#         vp[ix, iy] = Vapor_pressure(ix, iy, temp[ix, iy])
+        
+# for iy in np.arange(0, ny+1, dtype=int):
+#     for ix in np.arange(0, nx, dtype=int):
+#         vpg[ix, iy] = Vapor_pressure_gradient(ix, iy)
+        
+# for iy in np.arange(0, ny+1, dtype=int):
+#     for ix in np.arange(0, nx, dtype=int):
+#         fgr[ix, iy] = Facet_growth_rate(ix, iy)
+        
+# for iy in np.arange(0, ny+1, dtype=int):
+#     for ix in np.arange(0, nx, dtype=int):
+#         fg[ix, iy] = Facet_growth(ix, iy)
+
+# net_growth = np.sum(fg, axis = 1)
 
 ###################################################################
 
 
 
 # PLot of results:
-xticks = np.arange(0,-22,-2)
+xticks = np.arange(6,-20,-2)
 pd = int(plot_depth/dx)
 
 for p in np.arange(0, ny+1, h*pm):
@@ -305,7 +360,7 @@ plt.xlabel('Temperature C')
 plt.ylabel('Depth [cm]')
 plt.legend(fontsize=8)
 plt.grid(alpha=0.5)
-#plt.xticks(xticks)
+plt.xticks(xticks)
 plt.show()
 
 
