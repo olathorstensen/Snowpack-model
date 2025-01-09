@@ -2,8 +2,8 @@
 # v2.0 Neuman boundary conditions 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
-# Something is worng with the 'Sensible_longwave_heat(t, srf_T)' function
-# AKA ghost cell function, cells runs to cold
+# Ghost cell function works now! Need to use same IC as Simon for Sc.3 sim.
+
 
 import numpy as np
 import math as mt
@@ -17,9 +17,9 @@ from plotly.subplots import make_subplots #Whats this?
 
 ############################    Parameters   ############################ 
 runtime = 24             # Hours
-dt = 120                 # Time step [seconds] (Must be a divisor of 3600)
+dt = 30                 # Time step [seconds] (Must be a divisor of 3600)
 depth = 1                # Snow depth from surface [m]
-dx = 0.01                # Dist. interval [m]
+dx = 0.005                # Dist. interval [m]
 pm = 2                   # USE INTEGERS. Plot hour interval
 b_bc = 0                 # Bottom boundary condition, fixed [degC]
 spin_up = 1              # [0] No spin-up, [1] Run spin-up
@@ -32,8 +32,8 @@ plot_depth = 0.35        # Depth shown in plots measured from surface [m]
 ############################    Constants   ############################ 
 
     # Snow properties  
-k = 0.1                  # Thermal conductivity snow [W/m K]
-rho = 200                # density [kg/m3]
+k = 0.2                  # Thermal conductivity snow [W/m K]
+rho = 277                # density [kg/m3]
 cp = 2090                # Specific heat capacity of ice [J/kg C]
 T0 = 273.15              # Ice-point temperature [K]
 a = k/(rho*cp)           # Thermal diffusivity [m2/s]
@@ -90,7 +90,7 @@ def Sensible_longwave_heat(t, srf_T):
     T1 = -T1_amp * mt.cos( (2*mt.pi/(24*60*60)) * (t-T1_phase)) + T1_avg # Temp air
     T2 = -T2_amp * mt.cos( (2*mt.pi/(24*60*60)) * (t-T2_phase)) + T2_avg # Temp atm
     T = srf_T
-    heat_flux = T+C+A*(T1-T) - B*((T+T0)**4 - (T2+T0)**4)
+    heat_flux = T+(C+A*(T1-T) - B*((T+T0)**4 - (T2+T0)**4))/(k/dx)
     return heat_flux
 
 
