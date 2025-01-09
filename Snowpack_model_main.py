@@ -1,20 +1,14 @@
 ### 1D snowpack temperature simulator ###
-# v1.8 
+# v1.9 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
-# - Inplemented parameter for plot depths
-# - Time stamp for plots intervals 
-# - Fixed error in spin-up module regarding unsymmetrical  model runtime and spin-up runtime
-# Comment: Model simulates Scenario 2, but Net facet graph is off at the surface.
+# - Added new facetedness function
+# - Fixed typo in vapor pressure function 
 
 
 import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
-import plotly.graph_objects as go #Whats this?
-import plotly.express as px       #Whats this?
-from plotly.subplots import make_subplots #Whats this?
-
 
 
 ############################    Parameters   ############################ 
@@ -54,7 +48,7 @@ def Heat_flow(ix, iy, grid):
 
 
 def Vapor_pressure(ix, iy, T):
-    T = T + T0
+    T = T + 273.15
     vp = -9.09718 * ((T0 / T) - 1) -3.56654 * np.log10(T0 / T) 
     vp = vp +0.876793 * (1-(T/T0)) + np.log10(6.1071)
     vp = 10**vp
@@ -69,11 +63,11 @@ def Vapor_pressure_gradient(ix, iy):
 def Facet_growth_rate(ix, iy):
     v = vpg[ix, iy]
     if v > 5:
-        fgr = 1.0987 * np.log(v) - 1.7452 
+        fgr = 1.1297 * (np.log(v) - np.log(5))
     elif v < -5:
-        fgr = -1 * (1.0987 * np.log(np.abs(v)) - 1.7452)
+        fgr = -1 * (1.1297 * (np.log(np.abs(v)) - np.log(5)))
     else:
-        fgr = 0 
+        fgr = 0  
         
     return fgr
 
@@ -280,6 +274,5 @@ plt.ylabel('Depth [cm]')
 plt.legend()
 plt.grid(alpha=0.5)
 plt.show()
-
 
 
