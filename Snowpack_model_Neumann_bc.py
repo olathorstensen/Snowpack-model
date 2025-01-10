@@ -1,13 +1,14 @@
 ### 1D snowpack temperature simulator ###
-# v2.1 Neumann boundary conditions 
+# v2.2 Neumann boundary conditions 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
 #   - Can write solar and T1/T2 temp data to file
 #   - Can load Simons IC, but pathway must be specified manually to file
+#   - Vp function typo fixed
+#   - New facet growth rate function added
 
 # Comment: 
 #   - Max possible runtime: 24h
-#   - Need to add new vp function
 
 
 import numpy as np
@@ -148,7 +149,7 @@ def Heat_flow(ix, iy, grid, neuman):
 
 
 def Vapor_pressure(ix, iy, T):
-    T = T + T0
+    T = T + 273.15
     vp = -9.09718 * ((T0 / T) - 1) -3.56654 * np.log10(T0 / T) 
     vp = vp +0.876793 * (1-(T/T0)) + np.log10(6.1071)
     vp = 10**vp
@@ -163,9 +164,9 @@ def Vapor_pressure_gradient(ix, iy):
 def Facet_growth_rate(ix, iy):
     v = vpg[ix, iy]
     if v > 5:
-        fgr = 1.0987 * np.log(v) - 1.7452 
+        fgr = 1.1297 * (np.log(v) - np.log(5))
     elif v < -5:
-        fgr = -1 * (1.0987 * np.log(np.abs(v)) - 1.7452)
+        fgr = -1 * (1.1297 * (np.log(np.abs(v)) - np.log(5)))
     else:
         fgr = 0    
     return fgr
