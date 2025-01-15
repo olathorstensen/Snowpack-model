@@ -1,36 +1,38 @@
 ### 1D snowpack temperature simulator ###
-# v2.2 Neumann boundary conditions 
+# v2.3 Neumann boundary conditions 
 #@author: Ola Thorstensen and Thor Parmentier
-# Version update:
-#   - Can write solar and T1/T2 temp data to file
-#   - Can load Simons IC, but pathway must be specified manually to file
-#   - Vp function typo fixed
-#   - New facet growth rate function added
+# Version upldate:
+#   - SW surface forcing moved from surface cell to 'ghost' cell
+#   - Runtime no longer limited to 24 h
+#   - Possibility to write end-state temperature to file, and load as IC
 
 # Comment: 
-#   - Max possible runtime: 24h
+#   - Write end-state to file is a quick fix, as spin-up does not work atm. 
+#   - TODO Change color for temp plot and fix Spin-up module
+
 
 
 import numpy as np
 import math as mt
-import pandas
+import pandas as pd
 import os
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 
 
 ############################    Parameters   ############################ 
-runtime = 24             # Hours
-dt = 30                  # Time step [seconds] (Must be a divisor of 3600)
-depth = 1                # Snow depth from surface [m]
-dx = 0.005               # Dist. interval [m]
-pm = 2                   # USE INTEGERS. Plot hour interval
-b_bc = 0                 # Bottom boundary condition, fixed [degC]
-spin_up = 0              # [0] No spin-up, [1] Run spin-up
-sp_runtime = 24          # Spin-up run time [Hours]
-plot_depth = 0.35        # Depth shown in plots measured from surface [m]
-data_to_file = 1         # Write radiation and atm temp data to new file [0] No, [1] Yes
-load_ic_file = 1         # Load IC from file [0] No, [1]Steady, [2]+20%, [3]+30%, [4]+70, [5]-20%
+runtime = 24              # Hours (int)
+dt = 30                   # Time step [seconds] (Must be a divisor of 3600)
+depth = 1                 # Snow depth from surface [m]
+dx = 0.005                # Dist. interval [m]
+pisp = 2                  # Plot interval spacer [hours] (int)
+b_bc = 0                  # Bottom boundary condition, fixed [degC]
+spin_up = 0               # [0] No spin-up, [1] Run spin-up
+sp_runtime = 0            # Spin-up run time [Hours]
+plot_depth = 0.35         # Depth shown in plots measured from surface [m]
+endstate_to_file = 0      # Write end-of-run temperatures to file for use as IC
+load_ic_file = 1          # Load IC from file [0] No, [1] Yes
+data_to_file = 0          # Write radiation and atm temp data to new file [0] No, [1] Yes
 
 
 
@@ -74,11 +76,13 @@ T2_phase = 6600          # T2 phase shift [s]
 ############################    Data import   ############################ 
     
 if load_ic_file > 0:
-    input_file = r'D:\Dokumenter\Akademisk arbeid\Near surface Vapour pressure - paper\Snowpack model\IC_input.xlsx'
-    #current_dir = os.path.dirname(os.path.abspath(__file__)) #Needs bug fix
-    #input_file = os.path.join(current_dir, 'IC_input.xlsx')  #Needs bug fix
-    df1 = pandas.read_excel(input_file, header=None)
-    row = df1.iloc[load_ic_file-1, 1:].values
+    #input_file = r'D:\Dokumenter\...\IC_data_output.xlsx' # Use manual file path if current_dir doesnt work
+    current_dir = os.path.dirname(os.path.abspath(__file__)) # Test if works
+    input_file = os.path.join(current_dir, 'IC_data_output.xlsx')  # Test if works
+    print("File loaded:", input_file)
+    
+    df1 = pd.read_excel(input_file, header=0)
+    row = df1.iloc[:,0].values
     ic = np.array(row, dtype=float)
 
 
@@ -101,23 +105,36 @@ def Solar_rad(h_angle, iy):
     return rad_scaled
 
 
-def Solar_extinction(x0,x1,sw):
+#FIX iy
+def Solar_extinction(x0,sw):
     # Need depth and scaled solar radiation
     x0 = x0/100 # con. cm -> m
-    x1 = x1/100 # con. cm -> m
-    sw_joules = sw*dt*(1-mt.exp(-sw_k*depth)) # Radiation convertet to Joules
+    x1 = x0+dx
+    sw_joules = sw*dt*(1 - mt.exp(-sw_k*depth)) # W/m2*s -> Joules
     solar_array[5,iy] = sw_joules
-    A_sw = sw_joules * sw_k                   # A-term in the SW extinction formula
-    sw_partition = ((A_sw/-sw_k) * (mt.exp(-sw_k*x1) - mt.exp(-sw_k*x0))) /(cp*mass)
+    sw_partition = ((sw_joules*mt.exp(-sw_k*x0)) - (sw_joules*mt.exp(-sw_k*x1))) /(cp*mass) # J-> dT
     return sw_partition
 
 
-def Sensible_longwave_heat(t, srf_T, iy):
+
+def Heat_flux_surface(t, ix, iy, grid, sw_in) :
+    # T = Temperature surf T(x=dx).
+    # T
     iy = iy-1
+    T = grid[ix, iy]        # Temp. surface
+    T_dx = grid[ix+1, iy]   # Temp. x= +dx
     T1 = -T1_amp * mt.cos( (2*mt.pi/(24*60*60)) * (t-T1_phase)) + T1_avg # Temp air
-    T2 = -T2_amp * mt.cos( (2*mt.pi/(24*60*60)) * (t-T2_phase)) + T2_avg # Temp atm
-    T = srf_T    
-    heat_flux = T+(C+A*(T1-T) - B*((T+T0)**4 - (T2+T0)**4))/(k/dx)
+    T2 = -T2_amp * mt.cos( (2*mt.pi/(24*60*60)) * (t-T2_phase)) + T2_avg # Temp atm   
+    #heat_flux = T+(C+A*(T1-T) - B*((T+T0)**4 - (T2+T0)**4))*(dx/k)               
+    heat_flux = (
+    T_dx 
+    + (C + A * (T1 - T) 
+        - B * ((T + T0)**4 - (T2 + T0)**4) 
+        + ((sw_in * mt.exp(-sw_k * 0)) 
+          - (sw_in * mt.exp(-sw_k * dx))))
+    * (2*dx / k)
+    )
+    
     T_array[0,iy] = T1
     T_array[1,iy] = T2
     T_array[2,iy] = heat_flux
@@ -125,22 +142,21 @@ def Sensible_longwave_heat(t, srf_T, iy):
     return heat_flux
 
 
+
 def Heat_flow(ix, iy, grid, neuman):
+    iy = iy-1 
     if neuman == 1:
         if ix == 0:
-            iy = iy-1                                        
             t1 = ghost_cell[iy]
             t2 = grid[ix, iy] 
             t3 = grid[ix+1, iy]
             T = t2 + r*((-2 * t2) + t1 + t3)       
-        else:
-            iy = iy-1                                        
+        else:                       
             t1 = grid[ix-1, iy]
             t2 = grid[ix, iy] 
             t3 = grid[ix+1, iy]
             T = t2 + r*((-2 * t2) + t1 + t3)          
-    else:
-        iy = iy-1                                        
+    else:                                       
         t1 = grid[ix-1, iy]
         t2 = grid[ix, iy] 
         t3 = grid[ix+1, iy]
@@ -175,7 +191,20 @@ def Facet_growth_rate(ix, iy):
 def Facet_growth(ix, iy):
     fg = (fgr[ix, iy] + fgr[ix + 1, iy]) / 2 * dt / 10**6 
     return fg
-    
+
+def Diurnal_array_reshape(array, runtime):
+    array_dummy = np.delete(array, 0) 
+    if runtime > 24:
+        for i in np.arange(1, int(runtime/24)):
+            array = np.concatenate((array, array_dummy), axis=0)
+        # add remainder
+        if runtime%24 != 0:
+            array_ext = array_dummy[0:(int(runtime%24*h))]
+            array = np.concatenate((array, array_ext))
+
+    if runtime < 24:
+        array = array[0:int(runtime*h)+1]  # Crops temp forcing
+    return array
     
     
 #########################    Model domain    #########################
@@ -197,15 +226,14 @@ y = np.round(np.arange(0, ny+1, 1) *dt) #/3600) # Time axis in sec (divide by 36
 y_sec = y.astype(float)
 y_hours = np.round(np.arange(0, ny+1, 1) *dt/3600)
 
-base_time = datetime.strptime("00:00", "%H:%M")
-y_t = [(base_time + timedelta(seconds=seconds)).strftime("%H:%M") for seconds in y_sec]
+base_time = datetime.strptime("2025-01-01 00:00", "%Y-%m-%d %H:%M") #("00:00", "%H:%M")
+y_t = [(base_time + timedelta(seconds=seconds)).strftime("%y-%m-%d %H:%M") for seconds in y_sec]
 
 
     # Initial condition
 # Linear ic
 if load_ic_file == 0:
-    ic = np.linspace(-16, 0, nx +1)
-    
+    ic = np.linspace(-16, 0, nx +1)    
 temp[:, 0] = np.round(ic, 5)
 
 
@@ -216,12 +244,15 @@ temp[-1,:] = b_bc * np.ones(ny+1, dtype=float)
 # Surface BC    
 ghost_cell = np.zeros([ny+1], dtype=float)
 hour_angle = np.linspace(-180, 180, int(h * 24) + 1)
+hour_angle = Diurnal_array_reshape(hour_angle, runtime) #Extend or crops input to runtime length
 solar_array = np.zeros([6,ny+1], dtype=float) # Content: hour angle, elevation, zenith, rad, rad scaled, joules
 T_array = np.zeros([4,ny+1], dtype=float)
 
-   
+
 # Prints of shapes and numbers (all are numbers and none are shapes)
 print('r_number:', r)
+if r > 0.5:
+    print('The r_number is to high, should be < 0.5. Try adjust dt or dx')
 print('a_number:', a)
 print('h_number:', h)
 print('x', x.shape)
@@ -231,27 +262,12 @@ print('snowpack grid shape', temp.shape)
 
 
 #####################     Spin up    ##################### 
-
-xx = np.linspace(-90, 270, int(h * 24) + 1)
-bc = 9*np.sin(np.deg2rad(xx))-10      #Sinusoidal surface bc
-bc_dummy = np.delete(bc, 0)
-sp_bc = bc
-
 if spin_up == 1:
+    xx = np.linspace(-90, 270, int(h * 24) + 1)
+    sp_bc = 9*np.sin(np.deg2rad(xx))-10     #Sinusoidal surface bc   
+    sp_bc = Diurnal_array_reshape(sp_bc, sp_runtime)
     print('Spin-up initiated. Runtime', sp_runtime, 'hours')
-    
-    if sp_runtime > 24:
-        for i in np.arange(1, int(sp_runtime/24)):
-            sp_bc = np.concatenate((sp_bc, bc_dummy,), axis=0)
-        # add remainder
-        if sp_runtime%24 != 0:
-            sp_bc_ext = bc_dummy[0:(int(sp_runtime%24*h))]
-            sp_bc = np.concatenate((sp_bc, sp_bc_ext))
-
-    if sp_runtime < 24:
-        sp_bc = bc[0:int(sp_runtime*h)+1]  # Crops temp forcing
-
-
+  
     sp_ny = int((sp_runtime * 60 * 60) / dt) #Spin-up time steps
     sp_y = np.round( np.arange(0, sp_ny+1, 1) * dt/3600 , 2) #Spin-up y-axis
     sp_temp = np.zeros([nx+1, sp_ny+1], dtype=float) # Spin-up temp grid
@@ -281,12 +297,17 @@ if spin_up == 1:
 
 #####################     Main Model Loop    ##################### 
 # Temperature
-for iy in np.arange(1, ny+1, dtype=int):
-    ghost_cell[iy-1] = Sensible_longwave_heat(y[iy], temp[0,iy-1], iy)
-        
-    for ix in np.arange(0, nx, dtype=int):    
-        sw_in = Solar_rad(hour_angle[iy], iy)
-        temp[ix, iy] = Heat_flow(ix, iy, temp, 1) + Solar_extinction(x[ix+0],x[ix+1],sw_in) 
+for iy in np.arange(1, ny+1, dtype=int):       
+    for ix in np.arange(0, nx, dtype=int):
+        if ix == 0:
+            sw_in = Solar_rad(hour_angle[iy], iy)
+            ghost_cell[iy-1] = Heat_flux_surface(y[iy], ix, iy, temp, sw_in)
+            #Surface temp calc.
+            temp[ix, iy] = Heat_flow(ix, iy, temp, 1)
+        else:
+        # Temp. for snow pack
+            sw_in = Solar_rad(hour_angle[iy], iy)
+            temp[ix, iy] = Heat_flow(ix, iy, temp, 1) + Solar_extinction(x[ix+0],sw_in) 
         
 
 for iy in np.arange(0, ny+1, dtype=int):
@@ -309,14 +330,11 @@ net_growth = np.sum(fg, axis = 1)
 
 
 
-###################################################################
-
-# PLot of results:
+##########################     Plots    ########################## 
 xticks = np.arange(0,-20,-2)
-pd = int(plot_depth/dx)
-
-for p in np.arange(0, ny+1, h*pm):
-    plt.plot(temp[:pd,p], x[:pd], label= f"{y_t[p]}") # Plot every whole hour
+pld = int(plot_depth/dx)
+for p in np.arange(0, ny+1, h*pisp):
+    plt.plot(temp[:pld,p], x[:pld], label= f"{y_t[p]}") # Plot every whole hour
  
 plt.gca().invert_yaxis()
 plt.title('Scenario 3: Temperature')
@@ -328,8 +346,8 @@ plt.xticks(xticks)
 plt.show()
 
 
-for p in np.arange(0, ny+1, h*pm):
-    plt.plot(vp[:pd,p], x[:pd], label= f"Time {y_t[p]}") # Plot every whole hour
+for p in np.arange(0, ny+1, h*pisp):
+    plt.plot(vp[:pld,p], x[:pld], label= f"Time {y_t[p]}") # Plot every whole hour
 
 plt.gca().invert_yaxis()
 plt.title('Vapor pressure')
@@ -340,8 +358,8 @@ plt.grid(alpha=0.5)
 plt.show()
 
 
-for p in np.arange(0, ny+1, h*pm):
-    plt.plot(vpg[:pd,p], x[:pd], label= f"{y_t[p]}") # Plot every whole hour
+for p in np.arange(0, ny+1, h*pisp):
+    plt.plot(vpg[:pld,p], x[:pld], label= f"{y_t[p]}") # Plot every whole hour
     
 plt.gca().invert_yaxis()
 plt.title('Vapor pressure gradient')
@@ -352,8 +370,8 @@ plt.grid(alpha=0.5)
 plt.show()
 
 
-for p in np.arange(0, ny+1, h*pm):
-    plt.plot(fgr[:pd,p], x[:pd], label= f"{y_t[p]}") # Plot every whole hour
+for p in np.arange(0, ny+1, h*pisp):
+    plt.plot(fgr[:pld,p], x[:pld], label= f"{y_t[p]}") # Plot every whole hour
     
 plt.gca().invert_yaxis()
 plt.title('Facet growth rate')
@@ -364,7 +382,7 @@ plt.grid(alpha=0.5)
 plt.show()
 
 
-plt.plot(net_growth[:pd], x[:pd])
+plt.plot(net_growth[:pld], x[:pld])
 plt.gca().invert_yaxis()
 plt.title('Scenario 3: Net facet growth')
 plt.xlabel('Net growth [mm] ')
@@ -393,5 +411,17 @@ if data_to_file == 1:
         data_titles[8]: solar_array[4,:],
         data_titles[9]: solar_array[5,:],
         }
-    df = pandas.DataFrame(data)
+    df = pd.DataFrame(data)
     df.to_excel(output_file, index=False)
+    print("Wrote to file:", output_file)
+    
+if endstate_to_file == 1:
+    #Write end-state to file for IC
+    output_file2 = os.path.join(current_dir, 'IC_data_output.xlsx')
+    data_titles2 = [f"Temperature at time {y_t[-1]}"]
+    data2 = {
+        data_titles2[0]: temp[:,-1],
+        }
+    df = pd.DataFrame(data2)
+    df.to_excel(output_file2, index=False)
+    print("Wrote to file:", output_file2)
