@@ -1,14 +1,14 @@
 ### 1D snowpack temperature simulator ###
-# v2.3 Neumann boundary conditions 
+# v2.4 Neumann boundary conditions 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version upldate:
-#   - SW surface forcing moved from surface cell to 'ghost' cell
-#   - Runtime no longer limited to 24 h
-#   - Possibility to write end-state temperature to file, and load as IC
+#   - Spin-up function available
+#   - IC from spin-up can be saved to file
+#   - Some name changes to files and variables
 
 # Comment: 
-#   - Write end-state to file is a quick fix, as spin-up does not work atm. 
 #   - TODO Change color for temp plot and fix Spin-up module
+#   - Add Scenario 4.
 
 
 
@@ -18,6 +18,8 @@ import pandas as pd
 import os
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
+import time
+start_time = time.time()
 
 
 ############################    Parameters   ############################ 
@@ -26,13 +28,14 @@ dt = 30                   # Time step [seconds] (Must be a divisor of 3600)
 depth = 1                 # Snow depth from surface [m]
 dx = 0.005                # Dist. interval [m]
 pisp = 2                  # Plot interval spacer [hours] (int)
+sp_pisp = 6               # Spin-up Plot interval spacer [hours] (int)
 b_bc = 0                  # Bottom boundary condition, fixed [degC]
-spin_up = 0               # [0] No spin-up, [1] Run spin-up
-sp_runtime = 0            # Spin-up run time [Hours]
+spin_up = 1               # [0] No spin-up, [1] Run spin-up
+sp_runtime = 24*7         # Spin-up run time [Hours]
 plot_depth = 0.35         # Depth shown in plots measured from surface [m]
-endstate_to_file = 0      # Write end-of-run temperatures to file for use as IC
-load_ic_file = 1          # Load IC from file [0] No, [1] Yes
-data_to_file = 0          # Write radiation and atm temp data to new file [0] No, [1] Yes
+load_ic = 0               # Load IC from file [0] No, [1] Yes
+ic_to_file = 0            # Writes model IC to file. If spin-up[1] -> IC given by end of spin-up temp. [0] No, [1] Yes
+data_to_file = 0          # Write radiation and atm temp data to new file (spin-up excluded) [0] No, [1] Yes
 
 
 
@@ -74,11 +77,11 @@ T2_phase = 6600          # T2 phase shift [s]
 
 
 ############################    Data import   ############################ 
-    
-if load_ic_file > 0:
+current_dir = os.path.dirname(os.path.abspath(__file__))  
+
+if load_ic > 0:
     #input_file = r'D:\Dokumenter\...\IC_data_output.xlsx' # Use manual file path if current_dir doesnt work
-    current_dir = os.path.dirname(os.path.abspath(__file__)) # Test if works
-    input_file = os.path.join(current_dir, 'IC_data_output.xlsx')  # Test if works
+    input_file = os.path.join(current_dir, 'IC_data.xlsx')
     print("File loaded:", input_file)
     
     df1 = pd.read_excel(input_file, header=0)
@@ -89,7 +92,7 @@ if load_ic_file > 0:
 ###########################    Functions    ###########################
 def Solar_rad(h_angle, iy):
     elevation = mt.degrees(mt.asin(mt.cos(mt.radians(lat))* mt.cos((mt.radians(h_angle)))))
-    solar_array[0,iy] = elevation
+
     
     zenith = 90 - elevation
     if elevation > 0:
@@ -97,11 +100,13 @@ def Solar_rad(h_angle, iy):
     else:
         radiation = 0   
     rad_scaled = radiation/sw_rr
-    solar_array[0,iy] = h_angle
-    solar_array[1,iy] = elevation
-    solar_array[2,iy] = zenith
-    solar_array[3,iy] = radiation
-    solar_array[4,iy] = rad_scaled
+    if spin_up == 0:
+        solar_array[0,iy] = h_angle
+        solar_array[1,iy] = elevation
+        solar_array[2,iy] = zenith
+        solar_array[3,iy] = radiation
+        solar_array[4,iy] = rad_scaled
+        
     return rad_scaled
 
 
@@ -111,8 +116,9 @@ def Solar_extinction(x0,sw):
     x0 = x0/100 # con. cm -> m
     x1 = x0+dx
     sw_joules = sw*dt*(1 - mt.exp(-sw_k*depth)) # W/m2*s -> Joules
-    solar_array[5,iy] = sw_joules
     sw_partition = ((sw_joules*mt.exp(-sw_k*x0)) - (sw_joules*mt.exp(-sw_k*x1))) /(cp*mass) # J-> dT
+    if spin_up == 0:
+        solar_array[5,iy] = sw_joules
     return sw_partition
 
 
@@ -134,20 +140,21 @@ def Heat_flux_surface(t, ix, iy, grid, sw_in) :
           - (sw_in * mt.exp(-sw_k * dx))))
     * (2*dx / k)
     )
-    
-    T_array[0,iy] = T1
-    T_array[1,iy] = T2
-    T_array[2,iy] = heat_flux
-    T_array[3,iy] = T
+    if spin_up == 0:
+        T_array[0,iy] = T1
+        T_array[1,iy] = T2
+        T_array[2,iy] = heat_flux
+        T_array[3,iy] = T
+        
     return heat_flux
 
 
 
-def Heat_flow(ix, iy, grid, neuman):
+def Heat_flow(ix, iy, grid, neuman, bc_cell):
     iy = iy-1 
     if neuman == 1:
         if ix == 0:
-            t1 = ghost_cell[iy]
+            t1 = bc_cell[iy]
             t2 = grid[ix, iy] 
             t3 = grid[ix+1, iy]
             T = t2 + r*((-2 * t2) + t1 + t3)       
@@ -232,7 +239,7 @@ y_t = [(base_time + timedelta(seconds=seconds)).strftime("%y-%m-%d %H:%M") for s
 
     # Initial condition
 # Linear ic
-if load_ic_file == 0:
+if load_ic == 0:
     ic = np.linspace(-16, 0, nx +1)    
 temp[:, 0] = np.round(ic, 5)
 
@@ -263,35 +270,55 @@ print('snowpack grid shape', temp.shape)
 
 #####################     Spin up    ##################### 
 if spin_up == 1:
-    xx = np.linspace(-90, 270, int(h * 24) + 1)
-    sp_bc = 9*np.sin(np.deg2rad(xx))-10     #Sinusoidal surface bc   
-    sp_bc = Diurnal_array_reshape(sp_bc, sp_runtime)
-    print('Spin-up initiated. Runtime', sp_runtime, 'hours')
-  
+    print('Spin-up initiated. Spin-up time', sp_runtime, 'hours')
     sp_ny = int((sp_runtime * 60 * 60) / dt) #Spin-up time steps
-    sp_y = np.round( np.arange(0, sp_ny+1, 1) * dt/3600 , 2) #Spin-up y-axis
+    sp_y = np.arange(0, sp_ny+1, 1) * dt #Spin-up y-axis [sec]
     sp_temp = np.zeros([nx+1, sp_ny+1], dtype=float) # Spin-up temp grid
+    sp_ghost_cell = np.zeros([sp_ny+1], dtype=float)
+    sp_hour_angle = Diurnal_array_reshape(hour_angle, sp_runtime)
     sp_temp[:,0] = ic
-    sp_temp[0,:] = sp_bc
     sp_temp[-1,:] = b_bc * np.ones(sp_ny+1, dtype=float)  #Fixed bottom bc
-    print('dim spin', sp_bc.shape, sp_temp.shape)
 
-    for iy in np.arange(1, sp_ny+1, dtype=int):
-        for ix in np.arange(1, nx, dtype=int):
-            sp_temp[ix, iy] = Heat_flow(ix, iy, sp_temp, 0)
+            
+    for iy in np.arange(1, sp_ny+1, dtype=int):       
+        for ix in np.arange(0, nx, dtype=int):
+            if ix == 0:
+                sw_in = Solar_rad(sp_hour_angle[iy], iy)
+                sp_ghost_cell[iy-1] = Heat_flux_surface(sp_y[iy], ix, iy, sp_temp, sw_in)
+                #Surface temp calc.
+                sp_temp[ix, iy] = Heat_flow(ix, iy, sp_temp, 1, sp_ghost_cell)
+            else:
+            # Temp. for snow pack
+                sw_in = Solar_rad(sp_hour_angle[iy], iy)
+                sp_temp[ix, iy] = Heat_flow(ix, iy, sp_temp, 1, sp_ghost_cell) + Solar_extinction(x[ix],sw_in)
 
-          
+    spin_up = 0     
     ic = sp_temp[:, -1]
     temp[:,0] = ic
 
-    plt.plot(sp_temp[:,-1], x, label= f"Time {sp_y[-1]} h") # Plot every whole hour    
+    plt.plot(sp_temp[:,-1], x, label= f"Time {sp_y[-1]/3600} h") # Plot every whole hour    
     plt.gca().invert_yaxis()
     plt.title('Spin-up end state used for IC')
     plt.xlabel('Temperature [C] ')
     plt.ylabel('Depth [cm]')
     plt.legend()
     plt.grid(alpha=0.5)
-    plt.show()      
+    plt.show()  
+
+    xticks = np.arange(0,-20,-2)
+    pld = int(plot_depth/dx)
+    for p in np.arange(0, sp_ny+1, h*sp_pisp):
+        plt.plot(sp_temp[:pld,p], x[:pld], label= f"{sp_y[p]/3600}") # Plot every whole hour
+     
+    plt.gca().invert_yaxis()
+    plt.title('Scenario 3: Temperature spin-up')
+    plt.xlabel('Temperature C')
+    plt.ylabel('Depth [cm]')
+    plt.legend(fontsize=8)
+    plt.grid(alpha=0.5)
+    plt.xticks(xticks)
+    plt.show()
+    
 
 
 
@@ -303,12 +330,12 @@ for iy in np.arange(1, ny+1, dtype=int):
             sw_in = Solar_rad(hour_angle[iy], iy)
             ghost_cell[iy-1] = Heat_flux_surface(y[iy], ix, iy, temp, sw_in)
             #Surface temp calc.
-            temp[ix, iy] = Heat_flow(ix, iy, temp, 1)
+            temp[ix, iy] = Heat_flow(ix, iy, temp, 1, ghost_cell)
         else:
         # Temp. for snow pack
             sw_in = Solar_rad(hour_angle[iy], iy)
-            temp[ix, iy] = Heat_flow(ix, iy, temp, 1) + Solar_extinction(x[ix+0],sw_in) 
-        
+            temp[ix, iy] = Heat_flow(ix, iy, temp, 1, ghost_cell) + Solar_extinction(x[ix],sw_in) 
+         
 
 for iy in np.arange(0, ny+1, dtype=int):
     for ix in np.arange(0, nx+1, dtype=int):
@@ -395,7 +422,6 @@ plt.show()
 
 ############################    Data output   ############################ 
 if data_to_file == 1:
-    current_dir = os.path.dirname(os.path.abspath(__file__))
     output_file = os.path.join(current_dir, 'SC3_data_output.xlsx')
     data_titles = ["Time", "Surf_T", "T1", "T2","Hour Angle", "Elevation", 
                    "Zenith", "Radiation", "Rad_scaled", "Rad_en_joules", "A-term sw"]
@@ -415,13 +441,16 @@ if data_to_file == 1:
     df.to_excel(output_file, index=False)
     print("Wrote to file:", output_file)
     
-if endstate_to_file == 1:
+if ic_to_file == 1:
     #Write end-state to file for IC
-    output_file2 = os.path.join(current_dir, 'IC_data_output.xlsx')
-    data_titles2 = [f"Temperature at time {y_t[-1]}"]
+    output_file2 = os.path.join(current_dir, 'IC_data.xlsx')
+    data_titles2 = [f"Spin-up temp after {sp_y[-1]} hours"]
     data2 = {
-        data_titles2[0]: temp[:,-1],
+        data_titles2[0]: temp[:,0],
         }
     df = pd.DataFrame(data2)
     df.to_excel(output_file2, index=False)
     print("Wrote to file:", output_file2)
+
+end_time = time.time()
+print(f"Simulation complete. Runtime: {(end_time-start_time):.2f} seconds")
