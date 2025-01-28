@@ -1,16 +1,13 @@
 ### 1D snowpack temperature simulator ###
-# v2.4 Neumann boundary conditions 
+# v2.5 Neumann boundary conditions 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version upldate:
-#   - Spin-up function available
-#   - IC from spin-up can be saved to file
-#   - Some name changes to files and variables
+#   - Added latent heat 
 
 # Comment: 
-#   - TODO Change color for temp plot and fix Spin-up module
-#   - Add Scenario 4.
-
-
+#   - TODO Change color for temp plot, fix "neuman cond" in Heat_flow function,
+#     add increasing density with depth (maybe), make plot code more compact (itr list)
+#   - Instenses to looked at marked with "FIX"
 
 import numpy as np
 import math as mt
@@ -21,21 +18,24 @@ from datetime import datetime, timedelta
 import time
 start_time = time.time()
 
-
 ############################    Parameters   ############################ 
 runtime = 24              # Hours (int)
-dt = 30                   # Time step [seconds] (Must be a divisor of 3600)
+dt = 60                   # Time step [seconds] (Must be a divisor of 3600)
+dx = 0.01                 # Dist. interval [m]
 depth = 1                 # Snow depth from surface [m]
-dx = 0.005                # Dist. interval [m]
-pisp = 2                  # Plot interval spacer [hours] (int)
-sp_pisp = 6               # Spin-up Plot interval spacer [hours] (int)
 b_bc = 0                  # Bottom boundary condition, fixed [degC]
-spin_up = 1               # [0] No spin-up, [1] Run spin-up
-sp_runtime = 24*7         # Spin-up run time [Hours]
+pisp = 2                  # Plot interval spacer [hours] (int)
 plot_depth = 0.35         # Depth shown in plots measured from surface [m]
+# Spin up
+spin_up = 1               # [0] No spin-up, [1] Run spin-up
+sp_runtime = 24*4         # Spin-up run time [Hours]
+sp_pisp = 24               # Spin-up Plot interval spacer [hours] (int)
+# File
 load_ic = 0               # Load IC from file [0] No, [1] Yes
 ic_to_file = 0            # Writes model IC to file. If spin-up[1] -> IC given by end of spin-up temp. [0] No, [1] Yes
-data_to_file = 0          # Write radiation and atm temp data to new file (spin-up excluded) [0] No, [1] Yes
+data_to_file = 1          # Write radiation and atm temp data to new file (spin-up excluded) [0] No, [1] Yes
+
+
 
 
 
@@ -55,10 +55,10 @@ h = int((3600/dt))       # Number of dt increments between each whole hour [1]
     # Solar properties
 lat = 61                 # Latitude [deg]
 sw_con = 1361            # Solar constant [W/m2]
-sw_peak = 110            # Observed shortwave peak [W/m2]
-sw_mod = 659.8259        # Theoretical peak shortwave [W/m2]
+sw_peak = 110            # Observed shortwave peak [W/m2] 
+sw_mod = 659.8259         # Theoretical peak shortwave [W/m2]
 sw_rr = sw_mod/sw_peak   # Reduction ratio
-sw_k = 100               # Solar extinction coefficient (k)
+sw_k = 100               # Solar extinction coefficient (k) 
 
     # Sensible/latent/Longwave heat flux properties
 sigma = 5.67*10**-8      # Stefan-Boltzmann constant
@@ -87,6 +87,7 @@ if load_ic > 0:
     df1 = pd.read_excel(input_file, header=0)
     row = df1.iloc[:,0].values
     ic = np.array(row, dtype=float)
+    
 
 
 ###########################    Functions    ###########################
@@ -110,7 +111,7 @@ def Solar_rad(h_angle, iy):
     return rad_scaled
 
 
-#FIX iy
+
 def Solar_extinction(x0,sw):
     # Need depth and scaled solar radiation
     x0 = x0/100 # con. cm -> m
@@ -141,6 +142,7 @@ def Heat_flux_surface(t, ix, iy, grid, sw_in) :
     * (2*dx / k)
     )
     if spin_up == 0:
+        # Writes input data to file apart from spin-up
         T_array[0,iy] = T1
         T_array[1,iy] = T2
         T_array[2,iy] = heat_flux
@@ -152,24 +154,27 @@ def Heat_flux_surface(t, ix, iy, grid, sw_in) :
 
 def Heat_flow(ix, iy, grid, neuman, bc_cell):
     iy = iy-1 
-    if neuman == 1:
-        if ix == 0:
+    if neuman == 1 and ix == 0:
             t1 = bc_cell[iy]
-            t2 = grid[ix, iy] 
-            t3 = grid[ix+1, iy]
-            T = t2 + r*((-2 * t2) + t1 + t3)       
-        else:                       
-            t1 = grid[ix-1, iy]
-            t2 = grid[ix, iy] 
-            t3 = grid[ix+1, iy]
-            T = t2 + r*((-2 * t2) + t1 + t3)          
     else:                                       
         t1 = grid[ix-1, iy]
-        t2 = grid[ix, iy] 
-        t3 = grid[ix+1, iy]
-        T = t2 + r*((-2 * t2) + t1 + t3) 
+        
+    t2 = grid[ix, iy] 
+    t3 = grid[ix+1, iy]
+    T = t2 + r*((-2 * t2) + t1 + t3) 
     return T
 
+
+
+
+def Latent_heat(T_value):
+    if T_value > 0:
+        L = T_value  
+            
+    elif T_value <= 0:
+        L = 0
+    return L
+    
 
 def Vapor_pressure(ix, iy, T):
     T = T + 273.15
@@ -220,11 +225,13 @@ def Diurnal_array_reshape(array, runtime):
 nx = int(depth/dx)
 ny = int((runtime * 60 * 60) / dt)
 
-temp = np.zeros([nx+1, ny+1], dtype=float)  # Main snowpack grid
-vp = np.zeros([nx+1, ny+1], dtype=float)    # Vapor pressure grid
-vpg = np.zeros([nx+1, ny+1], dtype=float)    # Vapor pressure gradient grid
-fgr = np.zeros([nx+1, ny+1], dtype=float)    # Facet growth rate grid
-fg =  np.zeros([nx+1, ny+1], dtype=float)    # Facet growth grid
+temp = np.zeros([nx+1, ny+1], dtype=float)    # Main snowpack grid
+temp_dummy = np.zeros([nx+1, ny+1], dtype=float) 
+latent = np.zeros([nx+1, ny+1], dtype=float)  # Latent heat grid
+vp = np.zeros([nx+1, ny+1], dtype=float)      # Vapor pressure grid
+vpg = np.zeros([nx+1, ny+1], dtype=float)     # Vapor pressure gradient grid
+fgr = np.zeros([nx+1, ny+1], dtype=float)     # Facet growth rate grid
+fg =  np.zeros([nx+1, ny+1], dtype=float)     # Facet growth grid
 
 
     # Axis and time
@@ -233,8 +240,8 @@ y = np.round(np.arange(0, ny+1, 1) *dt) #/3600) # Time axis in sec (divide by 36
 y_sec = y.astype(float)
 y_hours = np.round(np.arange(0, ny+1, 1) *dt/3600)
 
-base_time = datetime.strptime("2025-01-01 00:00", "%Y-%m-%d %H:%M") #("00:00", "%H:%M")
-y_t = [(base_time + timedelta(seconds=seconds)).strftime("%y-%m-%d %H:%M") for seconds in y_sec]
+base_time = datetime.strptime("00:00 01/01/2025", "%H:%M %d/%m/%Y") 
+y_t = [(base_time + timedelta(seconds=seconds)).strftime("%H:%M %d/%m/%Y") for seconds in y_sec]
 
 
     # Initial condition
@@ -274,6 +281,7 @@ if spin_up == 1:
     sp_ny = int((sp_runtime * 60 * 60) / dt) #Spin-up time steps
     sp_y = np.arange(0, sp_ny+1, 1) * dt #Spin-up y-axis [sec]
     sp_temp = np.zeros([nx+1, sp_ny+1], dtype=float) # Spin-up temp grid
+    sp_latent = np.zeros([nx+1, sp_ny+1], dtype=float) # Spin-up latent heat grid
     sp_ghost_cell = np.zeros([sp_ny+1], dtype=float)
     sp_hour_angle = Diurnal_array_reshape(hour_angle, sp_runtime)
     sp_temp[:,0] = ic
@@ -282,15 +290,19 @@ if spin_up == 1:
             
     for iy in np.arange(1, sp_ny+1, dtype=int):       
         for ix in np.arange(0, nx, dtype=int):
+            sw_in = Solar_rad(sp_hour_angle[iy], iy)
             if ix == 0:
-                sw_in = Solar_rad(sp_hour_angle[iy], iy)
-                sp_ghost_cell[iy-1] = Heat_flux_surface(sp_y[iy], ix, iy, sp_temp, sw_in)
                 #Surface temp calc.
-                sp_temp[ix, iy] = Heat_flow(ix, iy, sp_temp, 1, sp_ghost_cell)
+                sp_ghost_cell[iy-1] = Heat_flux_surface(sp_y[iy], ix, iy, sp_temp, sw_in)
+                sp_temp[ix, iy] = Heat_flow(ix, iy, sp_temp, 1, sp_ghost_cell) + sp_latent[ix, iy-1]
+                
             else:
-            # Temp. for snow pack
-                sw_in = Solar_rad(sp_hour_angle[iy], iy)
-                sp_temp[ix, iy] = Heat_flow(ix, iy, sp_temp, 1, sp_ghost_cell) + Solar_extinction(x[ix],sw_in)
+                # Temp. for snow pack
+                sp_temp[ix, iy] = Heat_flow(ix, iy, sp_temp, 1, sp_ghost_cell) + Solar_extinction(x[ix],sw_in) + sp_latent[ix,iy]
+            
+            sp_latent[ix,iy] = Latent_heat(sp_temp[ix,iy])
+            if sp_temp[ix, iy] > 0:
+                sp_temp[ix, iy] = 0        
 
     spin_up = 0     
     ic = sp_temp[:, -1]
@@ -308,7 +320,7 @@ if spin_up == 1:
     xticks = np.arange(0,-20,-2)
     pld = int(plot_depth/dx)
     for p in np.arange(0, sp_ny+1, h*sp_pisp):
-        plt.plot(sp_temp[:pld,p], x[:pld], label= f"{sp_y[p]/3600}") # Plot every whole hour
+        plt.plot(sp_temp[:pld,p], x[:pld], label= f"{sp_y[p]/3600} Hours") # Plot every whole hour
      
     plt.gca().invert_yaxis()
     plt.title('Scenario 3: Temperature spin-up')
@@ -326,16 +338,19 @@ if spin_up == 1:
 # Temperature
 for iy in np.arange(1, ny+1, dtype=int):       
     for ix in np.arange(0, nx, dtype=int):
+        sw_in = Solar_rad(hour_angle[iy], iy)
         if ix == 0:
-            sw_in = Solar_rad(hour_angle[iy], iy)
+            #Surface temp. calc.
             ghost_cell[iy-1] = Heat_flux_surface(y[iy], ix, iy, temp, sw_in)
-            #Surface temp calc.
-            temp[ix, iy] = Heat_flow(ix, iy, temp, 1, ghost_cell)
+            temp[ix, iy] = Heat_flow(ix, iy, temp, 1, ghost_cell) + latent[ix, iy-1] 
         else:
-        # Temp. for snow pack
-            sw_in = Solar_rad(hour_angle[iy], iy)
-            temp[ix, iy] = Heat_flow(ix, iy, temp, 1, ghost_cell) + Solar_extinction(x[ix],sw_in) 
-         
+            # Snowpack temp. calc.
+            temp[ix, iy] = Heat_flow(ix, iy, temp, 1, ghost_cell) + Solar_extinction(x[ix],sw_in) + latent[ix, iy-1]           
+                
+        latent[ix, iy] = Latent_heat(temp[ix, iy])
+        if temp[ix, iy] > 0:
+            temp[ix, iy] = 0
+        
 
 for iy in np.arange(0, ny+1, dtype=int):
     for ix in np.arange(0, nx+1, dtype=int):
@@ -358,8 +373,11 @@ net_growth = np.sum(fg, axis = 1)
 
 
 ##########################     Plots    ########################## 
-xticks = np.arange(0,-20,-2)
+xticks = np.arange(0,-20,-2) #FIX change x-scale by MAX-MIN insted of fixed values
 pld = int(plot_depth/dx)
+
+
+
 for p in np.arange(0, ny+1, h*pisp):
     plt.plot(temp[:pld,p], x[:pld], label= f"{y_t[p]}") # Plot every whole hour
  
