@@ -1,8 +1,12 @@
 ### 1D snowpack temperature simulator ###
-# v2.5 Neumann boundary conditions 
+# v2.6 Neumann boundary conditions 
 #@author: Ola Thorstensen and Thor Parmentier
-# Version upldate:
-#   - Added latent heat 
+# Version update:
+#   - Radiometer and Tinytag data import
+#   - Import include: 
+#       ¤ Crop to 1.april period
+#       ¤ Noice filtering
+#       ¤ Interpolation to 30 sec and 1 min intervals
 
 # Comment: 
 #   - TODO Change color for temp plot, fix "neuman cond" in Heat_flow function,
@@ -20,7 +24,7 @@ start_time = time.time()
 
 ############################    Parameters   ############################ 
 runtime = 24              # Hours (int)
-dt = 60                   # Time step [seconds] (Must be a divisor of 3600)
+dt = 60                   # Time step [seconds] (Must be a divisor of 3600) For Sc. 4 use 30s or 60s
 dx = 0.01                 # Dist. interval [m]
 depth = 1                 # Snow depth from surface [m]
 b_bc = 0                  # Bottom boundary condition, fixed [degC]
@@ -29,12 +33,13 @@ plot_depth = 0.35         # Depth shown in plots measured from surface [m]
 # Spin up
 spin_up = 1               # [0] No spin-up, [1] Run spin-up
 sp_runtime = 24*4         # Spin-up run time [Hours]
-sp_pisp = 24               # Spin-up Plot interval spacer [hours] (int)
-# File
+sp_pisp = 24              # Spin-up Plot interval spacer [hours] (int)
+# Data and files
 load_ic = 0               # Load IC from file [0] No, [1] Yes
 ic_to_file = 0            # Writes model IC to file. If spin-up[1] -> IC given by end of spin-up temp. [0] No, [1] Yes
 data_to_file = 1          # Write radiation and atm temp data to new file (spin-up excluded) [0] No, [1] Yes
-
+scenario = 4              # Choose scenario [3],[4]
+window_size = 30          # Rolling window for radiometer data noice reduction
 
 
 
@@ -88,13 +93,61 @@ if load_ic > 0:
     row = df1.iloc[:,0].values
     ic = np.array(row, dtype=float)
     
+if scenario  == 4:
+    
+    # Radiometer data
+    input_file = os.path.join(current_dir, 'Radiometer_data.xlsx')
+    print("File loaded:", input_file)
+    df_r = pd.read_excel(input_file, header=11)
+    columns = ['Date and time','Net SW (W/m2)', 'Net LW (W/m2)', 'ELWup', 'ELWlow', 'Snow surface temp (°C)']
+    df_r = df_r[columns]
+    # Coarse crop and noice reduction
+    start_filter = pd.to_datetime("2022-03-29" + " 00:00:00") 
+    end_filter = pd.to_datetime("2022-04-03" + " 00:00:00")
+    df_r = df_r[df_r["Date and time"].between(start_filter, end_filter)]
+    df_r = df_r.reset_index(drop=True)
+    df_rf = df_r[["Date and time"]].copy() # New dataframe: 'radiometer_filtered'
+    for i in columns[1:]:
+        df_rf[i] = df_r[i].rolling(window=window_size, center=True).max() \
+                          .rolling(window=window_size, center=True).median() \
+                          .rolling(window=window_size, center=True).mean()  
+    # Final crop
+    start_filter = pd.to_datetime("2022-03-30" + " 00:00:00") 
+    end_filter = pd.to_datetime("2022-04-02" + " 00:00:00")
+    df_rf = df_rf[df_rf["Date and time"].between(start_filter, end_filter)] # Selecting 1.april period
+    df_rf = df_rf.reset_index(drop=True)    
+ 
+    if dt == 30:
+        freq = "30S" # Interpolates 30 sec interval
+        df_rf.set_index("Date and time", inplace=True)
+        df_rf = df_rf.resample(freq).interpolate(method="linear")
+        df_rf.reset_index(inplace=True) 
+    else:
+        freq = "1T"  # Interpolates 1 min interval
+        
+    # Chose input columns and convert to numpy array with formula below    
+    rad_data = np.array(df_rf.iloc[:,5].values, dtype=float)  #Choose a column FIX
+    # Lwin = ....
+    # SWnet = ...
 
+    # Tinytag temperature data
+    input_file = os.path.join(current_dir, 'Tinytag_data.xlsx')
+    print("File loaded:", input_file)
+    df_t = pd.read_excel(input_file, header=0)
+    df_t = df_t[['Date_B', 'Tinytag_B']] # Tinytag B - 150 cm
+    df_t.set_index("Date_B", inplace=True)
+    df_t = df_t.resample(freq).interpolate(method="linear")
+    df_t.reset_index(inplace=True)   
+
+    df_t = df_t[df_t["Date_B"].between(start_filter, end_filter)] # Selecting 1.april period
+    atm_data = np.array(df_t.iloc[:,1].values, dtype=float)
+ 
+    print("atm data shape", atm_data.shape)
+    print("rad_data", rad_data.shape)
 
 ###########################    Functions    ###########################
 def Solar_rad(h_angle, iy):
     elevation = mt.degrees(mt.asin(mt.cos(mt.radians(lat))* mt.cos((mt.radians(h_angle)))))
-
-    
     zenith = 90 - elevation
     if elevation > 0:
         radiation = sw_con * mt.cos(mt.radians(zenith))
@@ -106,10 +159,8 @@ def Solar_rad(h_angle, iy):
         solar_array[1,iy] = elevation
         solar_array[2,iy] = zenith
         solar_array[3,iy] = radiation
-        solar_array[4,iy] = rad_scaled
-        
+        solar_array[4,iy] = rad_scaled 
     return rad_scaled
-
 
 
 def Solar_extinction(x0,sw):
@@ -123,10 +174,7 @@ def Solar_extinction(x0,sw):
     return sw_partition
 
 
-
 def Heat_flux_surface(t, ix, iy, grid, sw_in) :
-    # T = Temperature surf T(x=dx).
-    # T
     iy = iy-1
     T = grid[ix, iy]        # Temp. surface
     T_dx = grid[ix+1, iy]   # Temp. x= +dx
@@ -142,7 +190,7 @@ def Heat_flux_surface(t, ix, iy, grid, sw_in) :
     * (2*dx / k)
     )
     if spin_up == 0:
-        # Writes input data to file apart from spin-up
+        # Writes input data to file apart from during spin-up
         T_array[0,iy] = T1
         T_array[1,iy] = T2
         T_array[2,iy] = heat_flux
@@ -151,26 +199,21 @@ def Heat_flux_surface(t, ix, iy, grid, sw_in) :
     return heat_flux
 
 
-
 def Heat_flow(ix, iy, grid, neuman, bc_cell):
     iy = iy-1 
     if neuman == 1 and ix == 0:
             t1 = bc_cell[iy]
     else:                                       
-        t1 = grid[ix-1, iy]
-        
+        t1 = grid[ix-1, iy]   
     t2 = grid[ix, iy] 
     t3 = grid[ix+1, iy]
     T = t2 + r*((-2 * t2) + t1 + t3) 
     return T
 
 
-
-
 def Latent_heat(T_value):
     if T_value > 0:
-        L = T_value  
-            
+        L = T_value             
     elif T_value <= 0:
         L = 0
     return L
@@ -203,6 +246,7 @@ def Facet_growth_rate(ix, iy):
 def Facet_growth(ix, iy):
     fg = (fgr[ix, iy] + fgr[ix + 1, iy]) / 2 * dt / 10**6 
     return fg
+
 
 def Diurnal_array_reshape(array, runtime):
     array_dummy = np.delete(array, 0) 
