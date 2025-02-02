@@ -1,5 +1,5 @@
 ### 1D snowpack temperature simulator ###
-# v1.0 
+# v1.1 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
 # - Pinzer and Schneebeli experiment
@@ -12,9 +12,9 @@ import plotly.graph_objects as go
 
 ############################    Parameters   ############################ 
 runtime = 24             # Hours
-dt = 10                 # Time step [seconds] (Must be a divisor of 3600)
+dt = 2                 # Time step [seconds] (Must be a divisor of 3600)
 depth = 0.02                # Snow depth from surface [m]
-dx = 0.002                # Dist. interval [m]
+dx = 0.001                # Dist. interval [m]
 pm = 2                   # USE INTEGERS. Give hourly plot rate
 
 
@@ -69,7 +69,8 @@ def Facet_growth_rate(ix, iy):
 
 
 def Facet_growth(ix, iy):
-    fg = (fgr[ix, iy] + fgr[ix + 1, iy]) / 2 * dt / 10**6
+    fg = (fgr[ix, iy] + fgr[ix, iy + 1]) / 2 * dt / 10**6        # Use this one to get a cell at the center of the snow sample
+    # fg = fgr[ix, iy] * dt / 10**6
     
     return fg
     
@@ -82,9 +83,9 @@ ny = int((runtime * 60 * 60) / dt)
 
 temp = np.zeros([nx+1, ny+1])  # Main snowpack grid
 vp = np.zeros([nx+1, ny+1])    # Vapor pressure grid
-vpg = np.zeros([nx+1, ny+1])    # Vapor pressure gradient grid
-fgr = np.zeros([nx+1, ny+1])    # Facet growth rate grid
-fg =  np.zeros([nx+1, ny+1])    # Facet growth grid
+vpg = np.zeros([nx, ny+1])    # Vapor pressure gradient grid
+fgr = np.zeros([nx, ny+1])    # Facet growth rate grid
+fg =  np.zeros([nx, ny])    # Facet growth grid
 
     # Axis and time
 x = np.linspace(0, depth*100, nx+1) # Depth axis
@@ -201,7 +202,7 @@ for iy in np.arange(0, ny+1, dtype=int):
     for ix in np.arange(0, nx, dtype=int):
         fgr[ix, iy] = Facet_growth_rate(ix, iy)
         
-for iy in np.arange(0, ny+1, dtype=int):
+for iy in np.arange(0, ny, dtype=int):
     for ix in np.arange(0, nx, dtype=int):
         fg[ix, iy] = Facet_growth(ix, iy)
 
@@ -343,7 +344,7 @@ plt.show()
 
 plt.figure(figsize=(9, 6))
 plt.plot(y, vp[0, :], label='Surface vp')
-plt.plot(y, vp[10, :], label='Bottom vp')
+plt.plot(y, vp[-1, :], label='Bottom vp')
 plt.title('Vapor Pressure')
 plt.xlabel('Time [h]')
 plt.ylabel('Vapor Pressure [mb]')
@@ -354,7 +355,7 @@ plt.show()
 # VPG
 plt.figure(figsize=(9, 6))
 plt.plot(y, vpg[0, :], label='Surface vpg')
-plt.plot(y, vpg[10, :], label='Bottom vpg')
+plt.plot(y, vpg[-1, :], label='Bottom vpg')
 plt.title('Vapor Pressure Gradient')
 plt.xlabel('Time [h]')
 plt.ylabel('Vapor Pressure Gradient [Pa/cm]')
@@ -365,7 +366,7 @@ plt.show()
 # Growth rate
 plt.figure(figsize=(9, 6))
 plt.plot(y, fgr[0, :], label='Surface fgr')
-plt.plot(y, fgr[9, :], label='Bottom fgr')
+plt.plot(y, fgr[-1, :], label='Bottom fgr')
 plt.title('Facet Growth Rate')
 plt.xlabel('Time [h]')
 plt.ylabel('Facet Growth Rate [nm/s]')
@@ -375,8 +376,8 @@ plt.show()
 
 # Growth 
 plt.figure(figsize=(9, 6))
-plt.plot(y, fg[0, :], label='Surface fg')
-plt.plot(y, fg[10, :], label='Bottom fg')
+plt.plot(y[: -1], fg[0, :], label='Surface fg')
+plt.plot(y[: -1], fg[-1, :], label='Bottom fg')
 plt.title('Facet Growth')
 plt.xlabel('Time [h]')
 plt.ylabel('Facet Growth [mm]')
@@ -384,9 +385,9 @@ plt.legend(title='Legend')
 plt.grid(True, alpha=0.5)
 plt.show()
 
-Net growth
+# Net growth
 plt.figure(figsize=(9, 6))
-plt.plot(net_growth[0:11], x, label='Net Growth')
+plt.plot(net_growth, x[0:-1], label='Net Growth')
 plt.title('Net Facet Growth')
 plt.xlabel('Net Growth [mm]')
 plt.ylabel('Depth [cm]')
