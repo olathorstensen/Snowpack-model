@@ -1,5 +1,5 @@
 ### 1D snowpack temperature simulator ###
-# v1.1 
+# v1.2 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
 # - Pinzer and Schneebeli experiment
@@ -69,8 +69,8 @@ def Facet_growth_rate(ix, iy):
 
 
 def Facet_growth(ix, iy):
-    fg = (fgr[ix, iy] + fgr[ix, iy + 1]) / 2 * dt / 10**6        # Use this one to get a cell at the center of the snow sample
-    # fg = fgr[ix, iy] * dt / 10**6
+    # fg = (fgr[ix, iy] + fgr[ix, iy + 1]) / 2 * dt / 10**6    #This is the code used in Excel. Why do we average over two time steps?
+    fg = fgr[ix, iy] * dt / 10**6
     
     return fg
     
@@ -85,7 +85,7 @@ temp = np.zeros([nx+1, ny+1])  # Main snowpack grid
 vp = np.zeros([nx+1, ny+1])    # Vapor pressure grid
 vpg = np.zeros([nx, ny+1])    # Vapor pressure gradient grid
 fgr = np.zeros([nx, ny+1])    # Facet growth rate grid
-fg =  np.zeros([nx, ny])    # Facet growth grid
+fg =  np.zeros([nx, ny+1])    # Facet growth grid
 
     # Axis and time
 x = np.linspace(0, depth*100, nx+1) # Depth axis
@@ -202,7 +202,7 @@ for iy in np.arange(0, ny+1, dtype=int):
     for ix in np.arange(0, nx, dtype=int):
         fgr[ix, iy] = Facet_growth_rate(ix, iy)
         
-for iy in np.arange(0, ny, dtype=int):
+for iy in np.arange(0, ny+1, dtype=int):
     for ix in np.arange(0, nx, dtype=int):
         fg[ix, iy] = Facet_growth(ix, iy)
 
@@ -376,8 +376,8 @@ plt.show()
 
 # Growth 
 plt.figure(figsize=(9, 6))
-plt.plot(y[: -1], fg[0, :], label='Surface fg')
-plt.plot(y[: -1], fg[-1, :], label='Bottom fg')
+plt.plot(y, fg[0, :], label='Surface fg')
+plt.plot(y, fg[-1, :], label='Bottom fg')
 plt.title('Facet Growth')
 plt.xlabel('Time [h]')
 plt.ylabel('Facet Growth [mm]')
