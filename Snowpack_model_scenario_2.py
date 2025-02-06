@@ -1,23 +1,26 @@
 ### 1D snowpack temperature simulator ###
-# v1.9 
+# v1.10 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
-# - Added new facetedness function
-# - Fixed typo in vapor pressure function 
-
-
+#   - Added beautiful sliders
+#   - Added big end figure
+#   - Added fig for paper
+ 
+    
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.widgets import Slider
 from datetime import datetime, timedelta
-
+import time
+start_time = time.time()
 
 ############################    Parameters   ############################ 
 runtime = 24             # Hours
-dt = 120                 # Time step [seconds] (Must be a divisor of 3600)
+dt = 30                 # Time step [seconds] (Must be a divisor of 3600)
 depth = 1                # Snow depth from surface [m]
-dx = 0.01                # Dist. interval [m]
-pm = 2                   # USE INTEGERS. Give hourly plot rate
-b_bc = 0                 # Bottom boundary condition, fixed [C]
+dx = 0.005                # Dist. interval [m]
+pisp = 2                   # USE INTEGERS. Give hourly plot rate
+b_bc = 0                 # Bottom boundary condition, fixed [°C]
 
 spin_up = 1            # [0] No spin-up, [1] Run spin-up
 sp_runtime = 24*7        # Spin-up run time [Hours]
@@ -27,7 +30,7 @@ plot_depth = 0.35           # Depth shown in plots [m]
 ############################    Constants   ############################   
 k = 0.1                  # Thermal conductivity snow [W/m K]
 rho = 200                # density [kg/m3]
-cp = 2090                # Specific heat capacity of ice [J/kg C]
+cp = 2090                # Specific heat capacity of ice [J/kg °C]
 T0 = 273.16              # Ice-point temperature [K]
 a = k/(rho*cp)           # Thermal diffusivity [m2/s]
 r = a*(dt/(dx*dx))       # Must be < 0.5 for model stability [1]
@@ -73,7 +76,7 @@ def Facet_growth_rate(ix, iy):
 
 
 def Facet_growth(ix, iy):
-    fg = (fgr[ix, iy] + fgr[ix + 1, iy]) / 2 * dt / 10**6
+    fg = (fgr[ix, iy] + fgr[ix, iy + 1]) / 2 * dt / 10**6
     
     return fg
     
@@ -86,15 +89,18 @@ ny = int((runtime * 60 * 60) / dt)
 
 temp = np.zeros([nx+1, ny+1], dtype=float)  # Main snowpack grid
 vp = np.zeros([nx+1, ny+1], dtype=float)    # Vapor pressure grid
-vpg = np.zeros([nx+1, ny+1], dtype=float)    # Vapor pressure gradient grid
-fgr = np.zeros([nx+1, ny+1], dtype=float)    # Facet growth rate grid
-fg =  np.zeros([nx+1, ny+1], dtype=float)    # Facet growth grid
+vpg = np.zeros([nx, ny+1], dtype=float)    # Vapor pressure gradient grid
+fgr = np.zeros([nx, ny+1], dtype=float)    # Facet growth rate grid
+fg =  np.zeros([nx, ny], dtype=float)    # Facet growth grid
 
     # Axis and time
 x = np.linspace(0, depth*100, nx+1) # Depth axis
-y = np.round( np.arange(0, ny+1, 1) * dt/3600 , 2) # Time axis
-base_time = datetime.strptime("00:00", "%H:%M")
-y_t = [(base_time + timedelta(hours=hour)).strftime("%H:%M") for hour in y]
+y = np.round(np.arange(0, ny+1, 1) *dt) #/3600) # Time axis in sec (divide by 3600 for h)
+y_sec = y.astype(float)
+y_hours = np.round(np.arange(0, ny+1, 1) *dt)/3600
+
+base_time = datetime.strptime("00:00 30/03/2022", "%H:%M %d/%m/%Y") 
+y_t = [(base_time + timedelta(seconds=seconds)).strftime("%H:%M %d/%m/%Y") for seconds in y_sec]
 
 
     ## Initial condition
@@ -120,10 +126,7 @@ if runtime > 24:
 if runtime < 24:
     bc = bc[0:int(runtime*h)+1]  # Crops temp forcing
 
-plt.plot(y, bc) 
-plt.title('Temperature surface forcing')
-plt.xlabel('Hours')
-plt.show()
+
 
 temp[0,:] = bc
 temp[-1,:] = b_bc * np.ones(ny+1, dtype=float)  #Fixed bottom bc
@@ -159,7 +162,7 @@ if spin_up == 1:
 
 
     sp_ny = int((sp_runtime * 60 * 60) / dt) #Spin-up time steps
-    sp_y = np.round( np.arange(0, sp_ny+1, 1) * dt/3600 , 2) #Spin-up y-axis
+    sp_y = np.round(np.arange(0, sp_ny+1, 1) * dt/3600 , 2) #Spin-up y-axis
     sp_temp = np.zeros([nx+1, sp_ny+1], dtype=float) # Spin-up temp grid
     sp_temp[:,0] = ic
     sp_temp[0,:] = sp_bc
@@ -172,16 +175,7 @@ if spin_up == 1:
 
           
     ic = sp_temp[:, -1]
-    temp[:,0] = ic
-
-    plt.plot(sp_temp[:,-1], x, label= f"Time {sp_y[-1]} h") # Plot every whole hour    
-    plt.gca().invert_yaxis()
-    plt.title('Spin-up end state used for IC')
-    plt.xlabel('Temperature [C] ')
-    plt.ylabel('Depth [cm]')
-    plt.legend()
-    plt.grid(alpha=0.5)
-    plt.show()      
+    temp[:,0] = ic      
 
 
 
@@ -203,7 +197,7 @@ for iy in np.arange(0, ny+1, dtype=int):
     for ix in np.arange(0, nx, dtype=int):
         fgr[ix, iy] = Facet_growth_rate(ix, iy)
         
-for iy in np.arange(0, ny+1, dtype=int):
+for iy in np.arange(0, ny, dtype=int):
     for ix in np.arange(0, nx, dtype=int):
         fg[ix, iy] = Facet_growth(ix, iy)
 
@@ -211,68 +205,180 @@ net_growth = np.sum(fg, axis = 1)
 
 ###################################################################
 
+end_time = time.time()
+print(f"Simulation complete. Runtime: {(end_time-start_time):.2f} seconds")
 
-
-# PLot of results:
-xticks = np.arange(0,-22,-2)
-pd = int(plot_depth/dx)
-
-for p in np.arange(0, ny+1, h*pm):
-    plt.plot(temp[:pd,p], x[:pd], label= f"{y_t[p]}") # Plot every whole hour
- 
-plt.gca().invert_yaxis()
-plt.title('Temperature')
-plt.xlabel('Temperature C')
-plt.ylabel('Depth [cm]')
-plt.legend(fontsize=8)
-plt.grid(alpha=0.5)
-plt.xticks(xticks)
-plt.show()
-
-
-for p in np.arange(0, ny+1, h*pm):
-    plt.plot(vp[:pd,p], x[:pd], label= f"Time {y_t[p]}") # Plot every whole hour
-
-plt.gca().invert_yaxis()
-plt.title('Vapor pressure')
-plt.xlabel('vp [mb] ')
-plt.ylabel('Depth [cm]')
-plt.legend()
-plt.grid(alpha=0.5)
-plt.show()
-
-
-for p in np.arange(0, ny+1, h*pm):
-    plt.plot(vpg[:pd,p], x[:pd], label= f"{y_t[p]}") # Plot every whole hour
+#%%
+# Plot of results:
+#   %matplotlib qt                # To be pasted in console before plotting
     
-plt.gca().invert_yaxis()
-plt.title('Vapor pressure gradient')
-plt.xlabel('vpg [mb/m] ')
-plt.ylabel('Depth [cm]')
-plt.legend()
-plt.grid(alpha=0.5)
-plt.show()
-
-
-for p in np.arange(0, ny+1, h*pm):
-    plt.plot(fgr[:pd,p], x[:pd], label= f"{y_t[p]}") # Plot every whole hour
     
-plt.gca().invert_yaxis()
-plt.title('Facet growth rate')
-plt.xlabel('Facet growth rate [nm/s] ')
-plt.ylabel('Depth [cm]')
-plt.legend()
-plt.grid(alpha=0.5)
+xticks = np.arange(0,-20,-2) #FIX change x-scale by MAX-MIN insted of fixed values
+pld = int(plot_depth/dx)
+time_steps = ny + 1
+
+### Sliders
+# Temp
+fig1, ax1 = plt.subplots(figsize=(9, 6))
+plt.subplots_adjust(bottom=0.2)  # Space for slider
+line1, = ax1.plot(temp[:pld, 0], x[:pld], label=f'Time: {y_t[0]}')
+
+ax1.set_title("Temperature Profile")
+ax1.set_xlabel("Temperature [°C]")
+ax1.set_ylabel("Depth [cm]")
+ax1.set_xticks(xticks)
+ax1.invert_yaxis()
+ax1.legend()
+ax1.grid(alpha=0.5)
+
+# Create slider axis
+slider_ax1 = plt.axes([0.2, 0.05, 0.6, 0.03])  # [left, bottom, width, height]
+time_slider = Slider(slider_ax1, "Time Step", 0, time_steps - 1, valinit=0, valstep=1)
+
+def update_time(val):
+    time_idx = int(time_slider.val)
+    line1.set_xdata(temp[:pld, time_idx])
+    ax1.legend([f'Time: {y_t[time_idx]}'], loc='upper right')
+    # fig1.canvas.draw_idle()  # Redraw the figure. Might not actually need this.
+
+time_slider.on_changed(update_time)
 plt.show()
 
 
-plt.plot(net_growth[:pd], x[:pd])
-plt.gca().invert_yaxis()
-plt.title('Net facet growth')
-plt.xlabel('Net growth [mm] ')
-plt.ylabel('Depth [cm]')
-plt.legend()
-plt.grid(alpha=0.5)
+# Growth rate
+fig2, ax2 = plt.subplots(figsize=(9, 6))
+plt.subplots_adjust(bottom=0.2)  # Space for slider
+line2, = ax2.plot(y_hours, fgr[0, :], label = f'Depth: {x[0]}')
+
+ax2.set_title("Facet growth rate")
+ax2.set_xlabel("Time [h]")
+ax2.set_ylabel("Facet growth rate [nm/s]")
+ax2.legend()
+ax2.grid(alpha=0.5)
+
+slider_ax2 = plt.axes([0.2, 0.05, 0.6, 0.03])  # [left, bottom, width, height]
+depth_slider = Slider(slider_ax2, "Depth", 0, len(x) - 2, valinit=0, valstep=1)
+
+def update_depth(val):
+    depth_idx = int(depth_slider.val)
+    line2.set_ydata(fgr[depth_idx, :])  # Update y-data (FGR at selected depth)
+    ax2.legend([f'Depth: {x[depth_idx]:.1f} cm'], loc='upper right')  
+    fig2.canvas.draw_idle()  # Redraw the figure. Might not need this
+
+depth_slider.on_changed(update_depth)
 plt.show()
+
+### Big fig
+fig, ax = plt.subplots(3, 3, figsize=(24, 12))
+
+# Spinup
+if spin_up == 1:
+    ax[0, 0].plot(sp_temp[:, -1], x, label=f"Time {sp_y[-1]} h")
+    ax[0, 0].set_title('Spin-up end state used for IC') 
+    ax[0, 0].set_xlabel('Temperature [°C]')  
+    ax[0, 0].set_ylabel('Depth [cm]')  
+    ax[0, 0].invert_yaxis()
+    ax[0, 0].legend()  
+    ax[0, 0].grid(alpha=0.5)
+
+# Surface BC
+ax[0, 1].plot(y_hours, bc)
+ax[0, 1].set_title('Temperature surface forcing')
+ax[0, 1].set_ylabel('Temperature [°C]')
+ax[0, 1].set_xlabel('Time [h]')
+ax[0, 1].grid(alpha = 0.5)
+
+# Temperature plot
+for p in np.arange(0, ny+1, h*pisp):
+    ax[0, 2].plot(temp[:pld, p], x[:pld], label=f'{y_t[p]}')
+ax[0, 2].set_title('Temperature')
+ax[0, 2].set_xlabel('Temperature [°C]')
+ax[0, 2].set_ylabel('Depth [cm]')
+ax[0, 2].invert_yaxis()
+ax[0, 2].legend(fontsize=8)
+ax[0, 2].grid(alpha=0.5)
+ax[0, 2].set_xticks(xticks)
+
+# Vapor Pressure plot
+for p in np.arange(0, ny+1, h*pisp):
+    ax[1, 0].plot(vp[:pld, p], x[:pld], label=f'{y_t[p]}')
+ax[1, 0].set_title('Vapor Pressure')
+ax[1, 0].set_xlabel('Vapor Pressure [mb]')
+ax[1, 0].set_ylabel('Depth [cm]')
+ax[1, 0].invert_yaxis()
+ax[1, 0].legend()
+ax[1, 0].grid(alpha=0.5)
+
+# Vapor Pressure over time plot
+ax[1, 1].plot(y_hours, vp[0, :], label='Surface vp')
+ax[1, 1].set_title('Surface Vapor Pressure')
+ax[1, 1].set_xlabel('Time [h]')
+ax[1, 1].set_ylabel('Vapor Pressure [mb]')
+ax[1, 1].legend()
+ax[1, 1].grid(alpha=0.5)
+
+# Vapor Pressure Gradient (VPG) plot
+ax[1, 2].plot(y_hours, vpg[0, :], label='Surface vpg')
+ax[1, 2].set_title('Vapor Pressure Gradient')
+ax[1, 2].set_xlabel('Time [h]')
+ax[1, 2].set_ylabel('Vapor Pressure Gradient [Pa/cm]')
+ax[1, 2].legend()
+ax[1, 2].grid(alpha=0.5)
+
+# Facet Growth Rate plot
+ax[2, 0].plot(y_hours, fgr[0, :], label='Surface fgr')
+ax[2, 0].plot(y_hours, fgr[-1, :], label='Bottom fgr')
+ax[2, 0].plot(y_hours, fgr[10, :], label='5 cm fgr')
+ax[2, 0].set_title('Facet Growth Rate')
+ax[2, 0].set_xlabel('Time [h]')
+ax[2, 0].set_ylabel('Facet Growth Rate [nm/s]')
+ax[2, 0].legend()
+ax[2, 0].grid(alpha=0.5)
+
+# Net Growth plot
+ax[2, 1].plot(net_growth, x[0:-1], label='Net Growth')
+ax[2, 1].set_title('Net Facet Growth')
+ax[2, 1].set_xlabel('Net Growth [mm]')
+ax[2, 1].set_ylabel('Depth [cm]')
+ax[2, 1].invert_yaxis()
+ax[2, 1].grid(alpha=0.5)
+
+#Net Growth near surface
+ax[2, 2].plot(net_growth[:pld], x[0:pld], label='Net growth near surface')
+ax[2, 2].set_title('Net Facet Growth Near Surface')
+ax[2, 2].set_xlabel('Net Growth [mm]')
+ax[2, 2].set_ylabel('Depth [cm]')
+ax[2, 2].invert_yaxis()
+ax[2, 2].grid(alpha=0.5)
+
+plt.tight_layout()
+plt.show()
+
+### Figure for the paper
+fig3, ax3 = plt.subplots(1, 2, figsize = (12, 6), gridspec_kw={'width_ratios': [2, 1]})
+# Temperature plot
+cmap = plt.get_cmap("tab20")  # Alternatives: "viridis", "plasma", "tab10", "tab20", "Set3"
+colors = [cmap(i / len(np.arange(0, ny+1, h*pisp))) for i in range(len(np.arange(0, ny+1, h*pisp)))]
+
+for i, p in enumerate(np.arange(0, ny+1, h*pisp)):
+    ax3[0].plot(temp[:pld, p], x[:pld], label=f'{y_t[p]}', color=colors[i])
+ax3[0].set_xlabel('Temperature [°C]')
+ax3[0].set_ylabel('Depth [cm]')
+ax3[0].invert_yaxis()
+ax3[0].legend(fontsize=11)
+ax3[0].grid(alpha=0.5)
+ax3[0].set_xticks(xticks)
+ax3[0].xaxis.set_label_position('top')
+ax3[0].xaxis.tick_top()  
+
+# Net growth near surface
+ax3[1].plot(net_growth[:pld], x[0:pld], label='Net growth near surface')
+ax3[1].set_xlabel("Net 'Facetedness' [mm]")
+ax3[1].set_ylabel('Depth [cm]')
+ax3[1].invert_yaxis()
+ax3[1].grid(alpha=0.5)
+ax3[1].xaxis.set_label_position('top')
+ax3[1].xaxis.tick_top()
+
 
 
