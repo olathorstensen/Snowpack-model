@@ -1,20 +1,18 @@
 ### 1D snowpack temperature simulator ###
-# v2.9 Neumann boundary conditions 
+# v3.0 Scenario 3 and 4 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
-#   - Allows for switch between scenarios 3 and 4 in parameter section (nearly) 
-#   - Fixing typos
-#   - Changing grid shapes for vpg and everything after. These should be plotted on half-steps, 
-#     but when dx is small, it will not be noticeable. Should still plot them correclty.
+#   - Added slide show mania
 
 
 # Comment: 
-#   - TODO Change color for temp plot, fix "neuman cond" in Heat_flow function,
+#   - TODO Change color for temp plot,
 #     add increasing density with depth (maybe), make plot code more compact (itr list)
 #   - Instenses to looked at marked with "FIX"
 #   - ic_to file can not be 1 if spin_up is 0
 #   - Need to plot the x axis 0.5dx off for vpg, fgr, fg and net_growth
 #   - Need staggered grid in y direction for net_growth
+#   - Switching scenario 4 data files to csv for increased read speed
 
 
 
@@ -23,7 +21,7 @@ import math as mt
 import pandas as pd
 import os
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Slider
+from matplotlib.widgets import Slider, Button
 from datetime import datetime, timedelta
 import time
 
@@ -34,8 +32,8 @@ runtime = 24*3              # Hours (int)
 dt = 30                   # Time step [seconds] (Must be a divisor of 3600) For Sc. 4 use 30s or 60s
 dx = 0.005                 # Dist. interval [m]
 depth = 1                 # Snow depth from surface [m]
-b_bc = 0                  # Bottom boundary condition, fixed [degC]
-pisp = 2                  # Plot interval spacer [hours] (int)
+b_bc = 0                  # Bottom boundary condition, fixed [°C]
+pisp = 6                  # Plot interval spacer [hours] (int)
 plot_depth = 0.35         # Depth shown in plots measured from surface [m]
 # Spin up
 spin_up = 0               # [0] No spin-up, [1] Run spin-up
@@ -56,15 +54,15 @@ window_size = 30          # Rolling window for radiometer data noice reduction
     # Snow properties  
 k = 0.1439               # Thermal conductivity snow [W/m K]    
 rho = 245                # density [kg/m3] #277
-cp = 2090                # Specific heat capacity of ice [J/kg C]
+cp = 2090                # Specific heat capacity of ice [J/kg °C]
 T0 = 273.15              # Ice-point temperature [K]
 a = k/(rho*cp)           # Thermal diffusivity [m2/s]
 r = a*(dt/(dx*dx))       # Must be < 0.5 for model stability [1]
-mass = rho*dx            # Mass of one snow cell with area 1 m2 [Kg]
+mass = rho*dx            # Mass of one snow cell with area 1 m2 [kg]
 h = int((3600/dt))       # Number of dt increments between each whole hour [1]
 
     # Solar properties
-lat = 61                 # Latitude [deg]
+lat = 61                 # Latitude [°]
 sw_con = 1361            # Solar constant [W/m2]
 sw_peak = 110            # Observed shortwave peak [W/m2] 
 sw_mod = 659.8259         # Theoretical peak shortwave [W/m2]
@@ -77,12 +75,12 @@ emis = 1                 # Snow emissivity
 C = 0                    # Coefficient 
 A = k/dx/6.655           # A-variable
 B = sigma * emis         # B-variable
-T1_amp = 6               # T1 amplitude [deg C]  #6
-T1_avg = -4              # T1 average temp. [deg C]
+T1_amp = 6               # T1 amplitude [°C]  #6
+T1_avg = -4              # T1 average temp. [°C]
 T1_phase = 6600          # T1 phase shift [s]
 
-T2_amp = 3               # T2 amplitude [deg C]
-T2_avg = -31             # T2 average temp. [deg C]
+T2_amp = 3               # T2 amplitude [°C]
+T2_avg = -31             # T2 average temp. [°C]
 T2_phase = 6600          # T2 phase shift [s] 
 
 
@@ -105,11 +103,11 @@ if scenario  == 4:
     input_file = os.path.join(current_dir, 'Radiometer_data.xlsx')
     print("File loaded:", input_file)
     df_r = pd.read_excel(input_file, header=11)
-    columns = ['Date and time','Net SW (W/m2)', 'Net LW (W/m2)', 'ELWup', 'ELWlow', 'Snow surface temp (°C)']
+    columns = ['Date and time','Net SW', 'Net LW', 'ELWup', 'ELWlow', 'Snow surface temp']
     df_r = df_r[columns]
     # Coarse crop and noise reduction
-    start_filter = pd.to_datetime("2022-03-29" + " 00:00:00") 
-    end_filter = pd.to_datetime("2022-04-03" + " 00:00:00")
+    start_filter = pd.to_datetime("2022.03.29" + " 00:00:00") 
+    end_filter = pd.to_datetime("2022.04.03" + " 00:00:00")
     df_r = df_r[df_r["Date and time"].between(start_filter, end_filter)]
     df_r = df_r.reset_index(drop=True)
     df_rf = df_r[["Date and time"]].copy() # New dataframe: 'radiometer_filtered'
@@ -118,8 +116,8 @@ if scenario  == 4:
                           .rolling(window=window_size, center=True).median() \
                           .rolling(window=window_size, center=True).mean()  
     # Final crop
-    start_filter = pd.to_datetime("2022-03-30" + " 00:00:00") 
-    end_filter = pd.to_datetime("2022-04-02" + " 00:00:00")
+    start_filter = pd.to_datetime("2022.03.30" + " 00:00:00") 
+    end_filter = pd.to_datetime("2022.04.02" + " 00:00:00")
     df_rf = df_rf[df_rf["Date and time"].between(start_filter, end_filter)] # Selecting 1.april period
     df_rf = df_rf.reset_index(drop=True)    
  
@@ -328,16 +326,18 @@ print('snowpack grid shape', temp.shape)
 
 
 #####################     Spin up    ##################### 
+spin_up_has_occurred = 0
+
 if spin_up == 1:
     print('Spin-up initiated. Spin-up time', sp_runtime, 'hours')
-    sp_ny = int((sp_runtime * 60 * 60) / dt) #Spin-up time steps
-    sp_y = np.arange(0, sp_ny+1, 1) * dt #Spin-up y-axis [sec]
+    sp_ny = int((sp_runtime * 60 * 60) / dt) # Spin-up time steps
+    sp_y = np.arange(0, sp_ny+1, 1) * dt # Spin-up y-axis [sec]
     sp_temp = np.zeros([nx+1, sp_ny+1], dtype=float) # Spin-up temp grid
     sp_latent = np.zeros([nx+1, sp_ny+1], dtype=float) # Spin-up latent heat grid
     sp_ghost_cell = np.zeros([sp_ny+1], dtype=float)
     sp_hour_angle = Diurnal_array_reshape(hour_angle, sp_runtime)
     sp_temp[:,0] = ic
-    sp_temp[-1,:] = b_bc * np.ones(sp_ny+1, dtype=float)  #Fixed bottom bc
+    sp_temp[-1,:] = b_bc * np.ones(sp_ny+1, dtype=float)  # Fixed bottom bc
 
             
     for iy in np.arange(1, sp_ny+1, dtype=int):       
@@ -356,34 +356,13 @@ if spin_up == 1:
             if sp_temp[ix, iy] > 0:
                 sp_temp[ix, iy] = 0        
 
-    spin_up = 0     
+    spin_up = 0 
+    spin_up_has_occurred = 1    
     ic = sp_temp[:, -1]
     temp[:,0] = ic
-
-    plt.plot(sp_temp[:,-1], x, label= f"Time {sp_y[-1]/3600} h") # Plot every whole hour    
-    plt.gca().invert_yaxis()
-    plt.title('Spin-up end state used for IC')
-    plt.xlabel('Temperature [°C] ')
-    plt.ylabel('Depth [cm]')
-    plt.legend()
-    plt.grid(alpha=0.5)
-    plt.show()  
-
-    xticks = np.arange(0,-20,-2)
-    pld = int(plot_depth/dx)
-    for p in np.arange(0, sp_ny+1, h*sp_pisp):
-        plt.plot(sp_temp[:pld,p], x[:pld], label= f"{sp_y[p]/3600} Hours") # Plot every whole hour
-     
-    plt.gca().invert_yaxis()
-    plt.title('Scenario 3: Temperature spin-up')
-    plt.xlabel('Temperature °C')
-    plt.ylabel('Depth [cm]')
-    plt.legend(fontsize=8)
-    plt.grid(alpha=0.5)
-    plt.xticks(xticks)
-    plt.show()
+    print('Spin-up complete')
     
-
+    
 
 #####################     Main Model Loop    ##################### 
 # Temperature
@@ -468,7 +447,7 @@ end_time = time.time()
 print(f"Simulation complete. Runtime: {(end_time-start_time):.2f} seconds")
 
 
-
+#%%
 ##########################     Plots    ########################## 
 xticks = np.arange(0,-20,-2) #FIX change x-scale by MAX-MIN insted of fixed values
 pld = int(plot_depth/dx)
@@ -535,14 +514,14 @@ plt.grid(alpha=0.5)
 plt.show()
 
 
-### Plot-Block: Can be runned independently from model routine in Spoider  
+### Plot-Block: Can be run independently from model routine in Spoider  
 #%%
 #Surface temp
 plt.figure(figsize=(9, 6))
 plt.plot(y,rad_data, label= "Measured") # Plot every whole hour  
 plt.plot(y, sp_temp[0,11520:], label= "Spin-up final 3-days") # Plot every whole hour   
 plt.title('Surface temp')
-plt.xlabel('Temperature [C] ')
+plt.xlabel('Temperature [°C] ')
 plt.ylabel('Depth [cm]')
 plt.legend()
 plt.grid(alpha=0.5)
@@ -554,7 +533,7 @@ plt.show()
 plt.plot(y,  solar_array[4,:], label= "Calc SW net") # Plot every whole hour    
 plt.plot(y, SW_net, label= "Measured SW net") # Plot every whole hour  
 plt.title('Shortwave rad')
-plt.xlabel('Temperature [C] ')
+plt.xlabel('Temperature [°C] ')
 plt.ylabel('Depth [cm]')
 plt.legend()
 plt.grid(alpha=0.5)
@@ -580,7 +559,7 @@ plt.plot(y, tinytag_A, label= "Tinytag A -10cm") # Plot every whole hour
 plt.plot(y,rad_data, label= "Radiometer surface temp") # Plot every whole hour  
 plt.title(f'Tinytag vs snow temp. SW k={sw_k}')
 plt.xlabel('Seconds')
-plt.ylabel('Temperature [C]')
+plt.ylabel('Temperature [°C]')
 plt.legend()
 plt.grid(alpha=0.5)
 plt.show()
@@ -589,56 +568,119 @@ plt.plot(sp_temp[:,-1], x, label="Spin up end t.") # Plot every whole hour
 plt.plot(temp[:,0], x, label= "IC") # Plot every whole hour    
 plt.gca().invert_yaxis()
 plt.title('Spin-up end state used for IC')
-plt.xlabel('Temperature [C] ')
+plt.xlabel('Temperature [°C] ')
 plt.ylabel('Depth [cm]')
 plt.legend()
 plt.grid(alpha=0.5)
 plt.show()
 
 #%%
-#Slide show maina
+# Slide show mania
 
+xticks = np.arange(0,-22,-2) #FIX change x-scale by MAX-MIN insted of fixed values
+pld = int(plot_depth/dx)
+
+
+# Temp slider
+fig1, ax1 = plt.subplots(figsize=(9, 6))
+plt.subplots_adjust(bottom=0.2)  # Space for slider
+line1, = ax1.plot(temp[:pld, 0], x[:pld], label=f'Time: {y_t[0]}')
+
+ax1.set_title("Temperature Profile")
+ax1.set_xlabel("Temperature [°C]")
+ax1.set_ylabel("Depth [cm]")
+ax1.set_xticks(xticks)
+ax1.invert_yaxis()
+ax1.legend()
+ax1.grid(alpha=0.5)
+
+# Slider
+slider_ax1 = plt.axes([0.2, 0.05, 0.6, 0.03])  # [left, bottom, width, height]
+time_slider = Slider(slider_ax1, "Time Step", 0, ny - 1, valinit=0, valstep=1)
+
+def update_time(val):
+    time_idx = int(time_slider.val)
+    line1.set_xdata(temp[:pld, time_idx])
+    ax1.legend([f'Time: {y_t[time_idx]}'], loc='upper right')
+    # fig1.canvas.draw_idle()  # Redraw the figure. Might not actually need this.
+
+time_slider.on_changed(update_time)
+plt.show()
+
+
+# Growth rate slider
+fig2, ax2 = plt.subplots(figsize=(9, 6))
+plt.subplots_adjust(bottom=0.3)  # Space for slider
+line2, = ax2.plot(y_hours, fgr[0, :], label = f'Depth: {x[0]}')
+
+ax2.set_title("Facet growth rate")
+ax2.set_xlabel("Time [h]")
+ax2.set_ylabel("Facet growth rate [nm/s]")
+ax2.set_yticks(np.arange(-4, 4, 0.5))
+ax2.legend()
+ax2.grid(alpha=0.5)
+
+# Slider
+slider_ax2 = plt.axes([0.2, 0.17, 0.6, 0.03])  # [left, bottom, width, height]
+depth_slider = Slider(slider_ax2, "Depth", 0, nx - 1, valinit=0, valstep=1)
+
+# Buttons
+button_ax2_up = plt.axes([0.4, 0.1, 0.1, 0.05])  # [left, bottom, width, height]
+button_ax2_down = plt.axes([0.5, 0.1, 0.1, 0.05])
+
+button_up = Button(button_ax2_up, "↑ Higher")
+button_down = Button(button_ax2_down, "↓ Deeper")
+
+def update_depth(val):
+    depth_idx = int(depth_slider.val)
+    line2.set_ydata(fgr[depth_idx, :])  # Update y-data (FGR at selected depth)
+    ax2.legend([f'Depth: {x[depth_idx]:.1f} cm'], loc='upper right')  
+    fig2.canvas.draw_idle()  # Redraw the figure. Might not need this
+
+def go_deeper(event):
+    current_val = depth_slider.val
+    if current_val < nx - 1:
+        depth_slider.set_val(current_val + 1)
+
+def go_higher(event):
+    current_val = depth_slider.val
+    if current_val > 0:
+        depth_slider.set_val(current_val - 1)
+
+depth_slider.on_changed(update_depth)
+button_down.on_clicked(go_deeper)
+button_up.on_clicked(go_higher)
+
+plt.show()
+
+
+#%%
 xticks = np.arange(0,-20,-2) #FIX change x-scale by MAX-MIN insted of fixed values
 pld = int(plot_depth/dx)
-time_steps = ny + 1
 
-fig, ax = plt.subplots(figsize=(9, 6))
-plt.subplots_adjust(bottom=0.2)  # Space for slider
-line, = ax.plot(temp[:pld, 0], x[:pld], label=f'Time: {y_t[0]}')
-
-ax.set_title("Temperature Profile")
-ax.set_xlabel("Temperature [°C]")
-ax.set_ylabel("Depth [cm]")
-ax.set_xticks(xticks)
-ax.invert_yaxis()
-ax.legend()
-ax.grid(alpha=0.5)
-
-slider_ax = plt.axes([0.2, 0.05, 0.6, 0.03])  # [left, bottom, width, height]
-time_slider = Slider(slider_ax, "Time Step", 0, time_steps - 1, valinit=0, valstep=1)
-
-def update(val):
-    time_idx = int(time_slider.val)
-    line.set_ydata(x[:pld])  # Ensure y-axis remains unchanged
-    line.set_xdata(temp[:pld, time_idx])  # Update x-data (temperature)
-    ax.legend([f'Time: {y_t[time_idx]}'], loc='upper right')
-    fig.canvas.draw_idle()  # Redraw the figure
-
-time_slider.on_changed(update)
-plt.show()
-#%%
 fig, ax = plt.subplots(3, 3, figsize=(24, 12))
 
-
 # Spinup
-if spin_up == 1:
-    ax[0, 0].plot(sp_temp[:, -1], x, label=f"Time {sp_y[-1]} h")
-    ax[0, 0].set_title('Spin-up end state used for IC') 
-    ax[0, 0].set_xlabel('Temperature [°C]')  
-    ax[0, 0].set_ylabel('Depth [cm]')  
+if spin_up_has_occurred == 1:
+    
+    for p in np.arange(0, sp_ny+1, h*sp_pisp):
+        ax[0, 0].plot(sp_temp[:, p], x, label= f"{sp_y[p]/3600} Hours")     
+    ax[0, 0].set_title('Temperature profiles spin-up')
+    ax[0, 0].set_xlabel('Temperature °C')
+    ax[0, 0].set_ylabel('Depth [cm]')
     ax[0, 0].invert_yaxis()
-    ax[0, 0].legend()  
+    ax[0, 0].legend(fontsize=8)
     ax[0, 0].grid(alpha=0.5)
+    ax[0, 0].set_xticks(xticks)
+    
+    
+    ax[0, 1].plot(sp_temp[:,-1], x, label= f"Time {sp_y[-1]/3600} h") 
+    ax[0, 1].set_title('Spin-up end state used for IC') 
+    ax[0, 1].set_xlabel('Temperature [°C]')  
+    ax[0, 1].set_ylabel('Depth [cm]')  
+    ax[0, 1].invert_yaxis()
+    ax[0, 1].legend()  
+    ax[0, 1].grid(alpha=0.5)
 
 
 # # Surface BC
