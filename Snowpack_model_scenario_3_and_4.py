@@ -1,5 +1,5 @@
 ### 1D snowpack temperature simulator ###
-# v2.8 Scenarios 3 and 4
+# v2.9 Neumann boundary conditions 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
 #   - Allows for switch between scenarios 3 and 4 in parameter section (nearly) 
@@ -7,32 +7,35 @@
 #   - Changing grid shapes for vpg and everything after. These should be plotted on half-steps, 
 #     but when dx is small, it will not be noticeable. Should still plot them correclty.
 
+
 # Comment: 
-#   - TO DO: Change color for temp plot, fix "neuman cond" in Heat_flow function,
+#   - TODO Change color for temp plot, fix "neuman cond" in Heat_flow function,
 #     add increasing density with depth (maybe), make plot code more compact (itr list)
-#   - Instanses to looked at marked with "FIX"
-#   - Should fix neagtative SW values
+#   - Instenses to looked at marked with "FIX"
 #   - ic_to file can not be 1 if spin_up is 0
 #   - Need to plot the x axis 0.5dx off for vpg, fgr, fg and net_growth
+#   - Need staggered grid in y direction for net_growth
 
-# NOTE: Changes made in hour_angle and T1 amp
+
 
 import numpy as np
 import math as mt
 import pandas as pd
 import os
 import matplotlib.pyplot as plt
+from matplotlib.widgets import Slider
 from datetime import datetime, timedelta
 import time
+
 start_time = time.time()
 
 ############################    Parameters   ############################ 
 runtime = 24*3              # Hours (int)
 dt = 30                   # Time step [seconds] (Must be a divisor of 3600) For Sc. 4 use 30s or 60s
-dx = 0.005                # Dist. interval [m]
+dx = 0.005                 # Dist. interval [m]
 depth = 1                 # Snow depth from surface [m]
-b_bc = 0                  # Bottom boundary condition, fixed [°C]
-pisp = 4                  # Plot interval spacer [hours] (int)
+b_bc = 0                  # Bottom boundary condition, fixed [degC]
+pisp = 2                  # Plot interval spacer [hours] (int)
 plot_depth = 0.35         # Depth shown in plots measured from surface [m]
 # Spin up
 spin_up = 0               # [0] No spin-up, [1] Run spin-up
@@ -43,18 +46,16 @@ load_ic = 1               # Load IC from file [0] No, [1] Yes
 ic_to_file = 0            # Writes model IC to file. If spin-up[1] -> IC given by end of spin-up temp. [0] No, [1] Yes
 data_to_file = 0          # Write radiation and atm temp data to new file (spin-up excluded) [0] No, [1] Yes
 
-scenario = 3              # Choose scenario [3],[4] Not fully working yet...
-window_size = 30          # Rolling window for radiometer data noise reduction
 bc_type = 1               # [0] Dirichlet (fixed), [1] Neumann (ghost cell)
-
-
+scenario = 3              # Choose scenario [3],[4] Not fully working yet...
+window_size = 30          # Rolling window for radiometer data noice reduction
 
 
 ############################    Constants   ############################ 
 
     # Snow properties  
-k = 0.2                  # Thermal conductivity snow [W/m K]
-rho = 277                # density [kg/m3]
+k = 0.1439               # Thermal conductivity snow [W/m K]    
+rho = 245                # density [kg/m3] #277
 cp = 2090                # Specific heat capacity of ice [J/kg C]
 T0 = 273.15              # Ice-point temperature [K]
 a = k/(rho*cp)           # Thermal diffusivity [m2/s]
@@ -68,7 +69,7 @@ sw_con = 1361            # Solar constant [W/m2]
 sw_peak = 110            # Observed shortwave peak [W/m2] 
 sw_mod = 659.8259         # Theoretical peak shortwave [W/m2]
 sw_rr = sw_mod/sw_peak   # Reduction ratio
-sw_k = 100               # Solar extinction coefficient (k) 
+sw_k = 50               # Solar extinction coefficient (k) 
 
     # Sensible/latent/Longwave heat flux properties
 sigma = 5.67*10**-8      # Stefan-Boltzmann constant
@@ -76,12 +77,12 @@ emis = 1                 # Snow emissivity
 C = 0                    # Coefficient 
 A = k/dx/6.655           # A-variable
 B = sigma * emis         # B-variable
-T1_amp = 5               # T1 amplitude [°C]  #6
-T1_avg = -4              # T1 average temp. [°C]
+T1_amp = 6               # T1 amplitude [deg C]  #6
+T1_avg = -4              # T1 average temp. [deg C]
 T1_phase = 6600          # T1 phase shift [s]
 
-T2_amp = 3               # T2 amplitude [°C]
-T2_avg = -31             # T2 average temp. [°C]
+T2_amp = 3               # T2 amplitude [deg C]
+T2_avg = -31             # T2 average temp. [deg C]
 T2_phase = 6600          # T2 phase shift [s] 
 
 
@@ -128,28 +129,29 @@ if scenario  == 4:
         df_rf = df_rf.resample(freq).interpolate(method="linear")
         df_rf.reset_index(inplace=True) 
     else:
-        freq = "1T"  # Interpolates 1 min interval
-        
-    # Chose input columns and convert to numpy array with formula below    
+        freq = "1T"  # Interpolates 1 min interval  
+    # Convert from pandas to numpy
     rad_data = np.array(df_rf.iloc[:,5].values, dtype=float)
-    SW_net = np.array(df_rf.iloc[:,1].values, dtype=float)#Choose a column FIX
-    # Lwin = ....
-    # SWnet = ...
+    SW_net = np.array(df_rf.iloc[:,1].values, dtype=float)
+    SW_net = np.where(SW_net<0, 0, SW_net)
 
     # Tinytag temperature data
     input_file = os.path.join(current_dir, 'Tinytag_data.xlsx')
     print("File loaded:", input_file)
     df_t = pd.read_excel(input_file, header=0)
-    df_t = df_t[['Date_B', 'Tinytag_B']] # Tinytag B - 150 cm
-    df_t.set_index("Date_B", inplace=True)
-    df_t = df_t.resample(freq).interpolate(method="linear")
-    df_t.reset_index(inplace=True)   
-
-    df_t = df_t[df_t["Date_B"].between(start_filter, end_filter)] # Selecting 1.april period
-    atm_data = np.array(df_t.iloc[:,1].values, dtype=float)
- 
-    print("atm data shape", atm_data.shape)
-    print("rad_data", rad_data.shape)
+    for i in ['A','B']:
+        tt_date = 'Date_'+str(i)
+        tt_temp = 'Tinytag_'+str(i)
+        df_tf = df_t[[tt_date, tt_temp]] 
+        df_tf.set_index(tt_date, inplace=True)
+        df_tf = df_tf.resample(freq).interpolate(method="linear")
+        df_tf.reset_index(inplace=True)   
+        df_tf = df_tf[df_tf[tt_date].between(start_filter, end_filter)] # Selecting 1.april period
+        if i == 'A':  
+            tinytag_A = np.array(df_tf.iloc[:,1].values, dtype=float)
+        elif i == 'B':
+            tinytag_B = np.array(df_tf.iloc[:,1].values, dtype=float)
+            
 
 ###########################    Functions    ###########################
 def Solar_rad(h_angle, iy):
@@ -208,7 +210,7 @@ def Heat_flux_surface(t, ix, iy, grid, sw_in) :
 def Heat_flow(ix, iy, grid, bc_type, bc_cell):
     iy = iy-1 
     if bc_type == 1 and ix == 0:
-        t1 = bc_cell[iy]
+            t1 = bc_cell[iy]
     else:                                       
         t1 = grid[ix-1, iy]   
     t2 = grid[ix, iy] 
@@ -250,8 +252,7 @@ def Facet_growth_rate(ix, iy):
 
 
 def Facet_growth(ix, iy):
-    # fg = (fgr[ix, iy] + fgr[ix, iy + 1]) / 2 * dt / 10**6             #This is the code used in Excel. Why do we average over two time steps?
-    fg = fgr[ix, iy] * dt / 10**6
+    fg = (fgr[ix, iy] + fgr[ix, iy+1]) / 2 * dt / 10**6 
     return fg
 
 
@@ -282,7 +283,7 @@ latent = np.zeros([nx+1, ny+1], dtype=float)  # Latent heat grid
 vp = np.zeros([nx+1, ny+1], dtype=float)      # Vapor pressure grid
 vpg = np.zeros([nx, ny+1], dtype=float)     # Vapor pressure gradient grid
 fgr = np.zeros([nx, ny+1], dtype=float)     # Facet growth rate grid
-fg =  np.zeros([nx, ny+1], dtype=float)     # Facet growth grid
+fg =  np.zeros([nx, ny], dtype=float)     # Facet growth grid
 
 
     # Axis and time
@@ -291,7 +292,7 @@ y = np.round(np.arange(0, ny+1, 1) *dt) #/3600) # Time axis in sec (divide by 36
 y_sec = y.astype(float)
 y_hours = np.round(np.arange(0, ny+1, 1) *dt)/3600
 
-base_time = datetime.strptime("00:00 01/01/2025", "%H:%M %d/%m/%Y") 
+base_time = datetime.strptime("00:00 30/03/2022", "%H:%M %d/%m/%Y") 
 y_t = [(base_time + timedelta(seconds=seconds)).strftime("%H:%M %d/%m/%Y") for seconds in y_sec]
 
 
@@ -308,7 +309,7 @@ temp[-1,:] = b_bc * np.ones(ny+1, dtype=float)
 
 # Surface BC    
 ghost_cell = np.zeros([ny+1], dtype=float)
-hour_angle = np.linspace(-202, 158, int(h * 24) + 1) #FIX -180, 180
+hour_angle = np.linspace(-204, 156, int(h * 24) + 1)
 hour_angle = Diurnal_array_reshape(hour_angle, runtime) #Extend or crops input to runtime length
 solar_array = np.zeros([6,ny+1], dtype=float) # Content: hour angle, elevation, zenith, rad, rad scaled, joules
 T_array = np.zeros([4,ny+1], dtype=float)
@@ -329,26 +330,26 @@ print('snowpack grid shape', temp.shape)
 #####################     Spin up    ##################### 
 if spin_up == 1:
     print('Spin-up initiated. Spin-up time', sp_runtime, 'hours')
-    sp_ny = int((sp_runtime * 60 * 60) / dt) # Spin-up time steps
-    sp_y = np.arange(0, sp_ny+1, 1) * dt # Spin-up y-axis [sec]
+    sp_ny = int((sp_runtime * 60 * 60) / dt) #Spin-up time steps
+    sp_y = np.arange(0, sp_ny+1, 1) * dt #Spin-up y-axis [sec]
     sp_temp = np.zeros([nx+1, sp_ny+1], dtype=float) # Spin-up temp grid
     sp_latent = np.zeros([nx+1, sp_ny+1], dtype=float) # Spin-up latent heat grid
     sp_ghost_cell = np.zeros([sp_ny+1], dtype=float)
     sp_hour_angle = Diurnal_array_reshape(hour_angle, sp_runtime)
     sp_temp[:,0] = ic
-    sp_temp[-1,:] = b_bc * np.ones(sp_ny+1, dtype=float)  # Fixed bottom bc
+    sp_temp[-1,:] = b_bc * np.ones(sp_ny+1, dtype=float)  #Fixed bottom bc
 
             
     for iy in np.arange(1, sp_ny+1, dtype=int):       
         for ix in np.arange(0, nx, dtype=int):
             sw_in = Solar_rad(sp_hour_angle[iy], iy)
             if ix == 0:
-                #Surface temp calc.
+                #Surface temp calc
                 sp_ghost_cell[iy-1] = Heat_flux_surface(sp_y[iy], ix, iy, sp_temp, sw_in)
                 sp_temp[ix, iy] = Heat_flow(ix, iy, sp_temp, 1, sp_ghost_cell) + sp_latent[ix, iy-1]
                 
             else:
-                # Temp for snow pack
+                # Temp for snowpack
                 sp_temp[ix, iy] = Heat_flow(ix, iy, sp_temp, 1, sp_ghost_cell) + Solar_extinction(x[ix],sw_in) + sp_latent[ix,iy]
             
             sp_latent[ix,iy] = Latent_heat(sp_temp[ix,iy])
@@ -375,7 +376,7 @@ if spin_up == 1:
      
     plt.gca().invert_yaxis()
     plt.title('Scenario 3: Temperature spin-up')
-    plt.xlabel('Temperature [°C]')
+    plt.xlabel('Temperature °C')
     plt.ylabel('Depth [cm]')
     plt.legend(fontsize=8)
     plt.grid(alpha=0.5)
@@ -384,23 +385,27 @@ if spin_up == 1:
     
 
 
-
 #####################     Main Model Loop    ##################### 
 # Temperature
+if scenario == 4:
+    #linscale = rad_data[0]/ic[0]
+    linscale = -7/ic[0]
+    temp[0,:] = rad_data      # Surface BC
+    temp[:,0] = ic * linscale # Scale IC
+elif scenario == 3:
+    bc_type = 1
 
-#temp[0,:] = rad_data
 
 for iy in np.arange(1, ny+1, dtype=int):       
     for ix in np.arange(1 if bc_type == 0 else 0, nx, dtype=int):
         sw_in = Solar_rad(hour_angle[iy], iy)
-        if ix == 0:
+        if ix == 0 and scenario == 3:
             #Surface temp. calc.
             ghost_cell[iy-1] = Heat_flux_surface(y[iy], ix, iy, temp, sw_in)
             temp[ix, iy] = Heat_flow(ix, iy, temp, bc_type, ghost_cell) + latent[ix, iy-1] 
         else:
             # Snowpack temp. calc.
             temp[ix, iy] = Heat_flow(ix, iy, temp, bc_type, ghost_cell) + Solar_extinction(x[ix],sw_in) + latent[ix, iy-1]           
-            #temp[ix, iy] = Heat_flow(ix, iy, temp, bc_type, ghost_cell) + latent[ix, iy-1]
             
         latent[ix, iy] = Latent_heat(temp[ix, iy])
         if temp[ix, iy] > 0:
@@ -419,94 +424,11 @@ for iy in np.arange(0, ny+1, dtype=int):
     for ix in np.arange(0, nx, dtype=int):
         fgr[ix, iy] = Facet_growth_rate(ix, iy)
         
-for iy in np.arange(0, ny+1, dtype=int):
+for iy in np.arange(0, ny, dtype=int):
     for ix in np.arange(0, nx, dtype=int):
         fg[ix, iy] = Facet_growth(ix, iy)
 
 net_growth = np.sum(fg, axis = 1)
-
-
-
-##########################     Plots    ########################## 
-xticks = np.arange(0,-20,-2) #FIX change x-scale by MAX-MIN insted of fixed values
-pld = int(plot_depth/dx)
-
-
-
-# Temp
-plt.figure(figsize=(9, 6))
-for p in np.arange(0, ny+1, h*pisp):
-    plt.plot(temp[:pld, p], x[:pld], label=f'{y_t[p]}')
-plt.title('Temperature')
-plt.xlabel('Temperature [°C]')
-plt.ylabel('Depth [cm]')
-plt.gca().invert_yaxis()
-plt.legend(fontsize=8)
-plt.grid(alpha=0.5)
-plt.xticks(xticks)
-plt.show()
-
-# Vapor pressure
-plt.figure(figsize=(9, 6))
-for p in np.arange(0, ny+1, h*pisp):
-    plt.plot(vp[:pld, p], x[:pld], label=f'{y_t[p]}')
-plt.title('Vapor Pressure')
-plt.xlabel('Vapor Pressure [mb]')
-plt.ylabel('Depth [cm]')
-plt.gca().invert_yaxis()
-plt.grid(alpha=0.5)
-plt.legend()
-plt.show()
-
-plt.figure(figsize=(9, 6))
-plt.plot(y_hours, vp[0, :], label='Surface vp')
-plt.title('Vapor Pressure')
-plt.xlabel('Time [h]')
-plt.ylabel('Vapor Pressure [mb]')
-plt.legend()
-plt.grid(alpha=0.5)
-plt.show()
-
-# VPG
-plt.figure(figsize=(9, 6))
-plt.plot(y_hours, vpg[0, :], label='Surface vpg')
-plt.title('Vapor Pressure Gradient')
-plt.xlabel('Time [h]')
-plt.ylabel('Vapor Pressure Gradient [Pa/cm]')
-plt.legend()
-plt.grid(alpha=0.5)
-plt.show()
-
-# Growth rate
-plt.figure(figsize=(9, 6))
-plt.plot(y_hours, fgr[0, :], label='Surface fgr')
-plt.plot(y_hours, fgr[-1, :], label='Bottom fgr')
-plt.plot(y_hours, fgr[10, :], label='5 cm fgr')
-plt.title('Facet Growth Rate')
-plt.xlabel('Time [h]')
-plt.ylabel('Facet Growth Rate [nm/s]')
-plt.legend()
-plt.grid(alpha=0.5)
-plt.show()
-
-# Net growth
-plt.figure(figsize=(9, 6))
-plt.plot(net_growth, x[0:-1], label='Net Growth')
-plt.title('Net Facet Growth')
-plt.xlabel('Net Growth [mm]')
-plt.ylabel('Depth [cm]')
-plt.gca().invert_yaxis()
-plt.grid(alpha=0.5)
-plt.show()
-
-plt.figure(figsize=(9, 6))
-plt.plot(net_growth[:pld], x[0:pld], label='Net Growth near surface')
-plt.title('Net Facet Growth')
-plt.xlabel('Net Growth [mm]')
-plt.ylabel('Depth [cm]')
-plt.gca().invert_yaxis()
-plt.grid(alpha=0.5)
-plt.show()
 
 
 
@@ -545,56 +467,252 @@ if ic_to_file == 1:
 end_time = time.time()
 print(f"Simulation complete. Runtime: {(end_time-start_time):.2f} seconds")
 
+
+
+##########################     Plots    ########################## 
+xticks = np.arange(0,-20,-2) #FIX change x-scale by MAX-MIN insted of fixed values
+pld = int(plot_depth/dx)
+
+
+# for p in np.arange(0, ny+1, h*pisp): #plots all 3 days
+for p in np.arange(h*24, h*48, h*pisp): # Plots day 2. FIX, make better
+    plt.plot(temp[:pld,p], x[:pld], label= f"{y_t[p]}") # Plot every whole hour
+
  
+plt.gca().invert_yaxis()
+plt.title('Scenario 3: Temperature')
+plt.xlabel('Temperature C')
+plt.ylabel('Depth [cm]')
+plt.legend(fontsize=8)
+plt.grid(alpha=0.5)
+plt.xticks(xticks)
+plt.show()
+
+
+for p in np.arange(0, ny+1, h*pisp):
+    plt.plot(vp[:pld,p], x[:pld], label= f"Time {y_t[p]}") # Plot every whole hour
+
+plt.gca().invert_yaxis()
+plt.title('Vapor pressure')
+plt.xlabel('vp [mb] ')
+plt.ylabel('Depth [cm]')
+plt.legend()
+plt.grid(alpha=0.5)
+plt.show()
+
+
+for p in np.arange(0, ny+1, h*pisp):
+    plt.plot(vpg[:pld,p], x[:pld], label= f"{y_t[p]}") # Plot every whole hour
+    
+plt.gca().invert_yaxis()
+plt.title('Vapor pressure gradient')
+plt.xlabel('vpg [mb/m] ')
+plt.ylabel('Depth [cm]')
+plt.legend()
+plt.grid(alpha=0.5)
+plt.show()
+
+
+for p in np.arange(0, ny+1, h*pisp):
+    plt.plot(fgr[:pld,p], x[:pld], label= f"{y_t[p]}") # Plot every whole hour
+    
+plt.gca().invert_yaxis()
+plt.title('Facet growth rate')
+plt.xlabel('Facet growth rate [nm/s] ')
+plt.ylabel('Depth [cm]')
+plt.legend()
+plt.grid(alpha=0.5)
+plt.show()
+
+
+plt.plot(net_growth[:pld], x[:pld])
+plt.gca().invert_yaxis()
+plt.title('Scenario 3: Net facet growth')
+plt.xlabel('Net growth [mm] ')
+plt.ylabel('Depth [cm]')
+#plt.legend()
+plt.grid(alpha=0.5)
+plt.show()
+
+
+### Plot-Block: Can be runned independently from model routine in Spoider  
 #%%
-### Plot-Block: Can be run independently from model routine in Spyder 
 #Surface temp
+plt.figure(figsize=(9, 6))
 plt.plot(y,rad_data, label= "Measured") # Plot every whole hour  
 plt.plot(y, sp_temp[0,11520:], label= "Spin-up final 3-days") # Plot every whole hour   
 plt.title('Surface temp')
-plt.xlabel('Temperature [°C] ')
+plt.xlabel('Temperature [C] ')
 plt.ylabel('Depth [cm]')
 plt.legend()
 plt.grid(alpha=0.5)
 plt.show()
 
 #%%
-# #Solar plot
-# plt.plot(y[:2880], solar_array[4,:2880], label= "Calc") # Plot every whole hour    
-# plt.plot(y[:2880], SW_net[:2880], label= "Measured 30.03.22") # Plot every whole hour  
-# plt.title('Shortwave rad')
-# plt.xlabel('Temperature [°C] ')
-# plt.ylabel('Depth [cm]')
-# plt.legend()
-# plt.grid(alpha=0.5)
-# plt.show()
 
 #Solar plot
-plt.plot(y, solar_array[4,:], label= "Calc") # Plot every whole hour    
-plt.plot(y, SW_net, label= "Measured 30.03.22") # Plot every whole hour  
+plt.plot(y,  solar_array[4,:], label= "Calc SW net") # Plot every whole hour    
+plt.plot(y, SW_net, label= "Measured SW net") # Plot every whole hour  
 plt.title('Shortwave rad')
-plt.xlabel('Temperature [°C] ')
+plt.xlabel('Temperature [C] ')
 plt.ylabel('Depth [cm]')
 plt.legend()
 plt.grid(alpha=0.5)
 plt.show()
+
+# fig, ax1 = plt.subplots(figsize=(9, 6))
+# ax1.plot(y_hours, rad_data, color='tab:red', label="Rad. temp srf")
+# ax1.set_xlabel("Time")
+# ax1.set_ylabel("Temperature [°C]", color='tab:red')
+# ax1.tick_params(axis='y', labelcolor='tab:red')  # Color of the y-axis labels
+
+# ax2 = ax1.twinx()  # This shares the same x-axis but will have its own y-axis
+# ax2.plot(y_hours, SW_net, color='tab:blue', label="SW net")
+# ax2.set_ylabel("W/m2", color='tab:blue')
+# ax2.tick_params(axis='y', labelcolor='tab:blue')  # Color of the second y-axis labels
+
 
 #%%
 #Temperature
-plt.plot(y, T_array[0,:], label= "T1") # Plot every whole hour   
-plt.plot(y, atm_data, label= "Tinytag B 150cm") # Plot every whole hour  
-plt.title('SW in')
+plt.figure(figsize=(10, 6))
+plt.plot(y, temp[20,:], label= "Snow 10cm") # Plot every whole hour  
+plt.plot(y, tinytag_A, label= "Tinytag A -10cm") # Plot every whole hour  
+plt.plot(y,rad_data, label= "Radiometer surface temp") # Plot every whole hour  
+plt.title(f'Tinytag vs snow temp. SW k={sw_k}')
 plt.xlabel('Seconds')
-plt.ylabel('Temperature [°C]')
+plt.ylabel('Temperature [C]')
+plt.legend()
+plt.grid(alpha=0.5)
+plt.show()
+#%%
+plt.plot(sp_temp[:,-1], x, label="Spin up end t.") # Plot every whole hour   
+plt.plot(temp[:,0], x, label= "IC") # Plot every whole hour    
+plt.gca().invert_yaxis()
+plt.title('Spin-up end state used for IC')
+plt.xlabel('Temperature [C] ')
+plt.ylabel('Depth [cm]')
 plt.legend()
 plt.grid(alpha=0.5)
 plt.show()
 
-# plt.plot(y, atm_data, label= f"Time {sp_y[-1]/3600} h") # Plot every whole hour    
-# plt.gca().invert_yaxis()
-# plt.title('SW in')
-# plt.xlabel('Temperature [°C] ')
-# plt.ylabel('Depth [cm]')
-# plt.legend()
-# plt.grid(alpha=0.5)
-# plt.show()
+#%%
+#Slide show maina
+
+xticks = np.arange(0,-20,-2) #FIX change x-scale by MAX-MIN insted of fixed values
+pld = int(plot_depth/dx)
+time_steps = ny + 1
+
+fig, ax = plt.subplots(figsize=(9, 6))
+plt.subplots_adjust(bottom=0.2)  # Space for slider
+line, = ax.plot(temp[:pld, 0], x[:pld], label=f'Time: {y_t[0]}')
+
+ax.set_title("Temperature Profile")
+ax.set_xlabel("Temperature [°C]")
+ax.set_ylabel("Depth [cm]")
+ax.set_xticks(xticks)
+ax.invert_yaxis()
+ax.legend()
+ax.grid(alpha=0.5)
+
+slider_ax = plt.axes([0.2, 0.05, 0.6, 0.03])  # [left, bottom, width, height]
+time_slider = Slider(slider_ax, "Time Step", 0, time_steps - 1, valinit=0, valstep=1)
+
+def update(val):
+    time_idx = int(time_slider.val)
+    line.set_ydata(x[:pld])  # Ensure y-axis remains unchanged
+    line.set_xdata(temp[:pld, time_idx])  # Update x-data (temperature)
+    ax.legend([f'Time: {y_t[time_idx]}'], loc='upper right')
+    fig.canvas.draw_idle()  # Redraw the figure
+
+time_slider.on_changed(update)
+plt.show()
+#%%
+fig, ax = plt.subplots(3, 3, figsize=(24, 12))
+
+
+# Spinup
+if spin_up == 1:
+    ax[0, 0].plot(sp_temp[:, -1], x, label=f"Time {sp_y[-1]} h")
+    ax[0, 0].set_title('Spin-up end state used for IC') 
+    ax[0, 0].set_xlabel('Temperature [°C]')  
+    ax[0, 0].set_ylabel('Depth [cm]')  
+    ax[0, 0].invert_yaxis()
+    ax[0, 0].legend()  
+    ax[0, 0].grid(alpha=0.5)
+
+
+# # Surface BC
+# ax[0, 1].plot(y_hours, bc)
+# ax[0, 1].set_title('Temperature surface forcing')
+# ax[0, 1].set_ylabel('Temperature [°C]')
+# ax[0, 1].set_xlabel('Time [h]')
+# ax[0, 1].grid(alpha = 0.5)
+
+
+# Temperature plot
+for p in np.arange(0, ny+1, h*pisp):
+    ax[0, 2].plot(temp[:pld, p], x[:pld], label=f'{y_t[p]}')
+ax[0, 2].set_title('Temperature')
+ax[0, 2].set_xlabel('Temperature [°C]')
+ax[0, 2].set_ylabel('Depth [cm]')
+ax[0, 2].invert_yaxis()
+ax[0, 2].legend(fontsize=8)
+ax[0, 2].grid(alpha=0.5)
+ax[0, 2].set_xticks(xticks)
+
+# Vapor Pressure plot
+for p in np.arange(0, ny+1, h*pisp):
+    ax[1, 0].plot(vp[:pld, p], x[:pld], label=f'{y_t[p]}')
+ax[1, 0].set_title('Vapor Pressure')
+ax[1, 0].set_xlabel('Vapor Pressure [mb]')
+ax[1, 0].set_ylabel('Depth [cm]')
+ax[1, 0].invert_yaxis()
+ax[1, 0].legend()
+ax[1, 0].grid(alpha=0.5)
+
+# Vapor Pressure over time plot
+ax[1, 1].plot(y_hours, vp[0, :], label='Surface vp')
+ax[1, 1].set_title('Surface Vapor Pressure')
+ax[1, 1].set_xlabel('Time [h]')
+ax[1, 1].set_ylabel('Vapor Pressure [mb]')
+ax[1, 1].legend()
+ax[1, 1].grid(alpha=0.5)
+
+# Vapor Pressure Gradient (VPG) plot
+ax[1, 2].plot(y_hours, vpg[0, :], label='Surface vpg')
+ax[1, 2].set_title('Vapor Pressure Gradient')
+ax[1, 2].set_xlabel('Time [h]')
+ax[1, 2].set_ylabel('Vapor Pressure Gradient [Pa/cm]')
+ax[1, 2].legend()
+ax[1, 2].grid(alpha=0.5)
+
+# Facet Growth Rate plot
+ax[2, 0].plot(y_hours, fgr[0, :], label='Surface fgr')
+ax[2, 0].plot(y_hours, fgr[-1, :], label='Bottom fgr')
+ax[2, 0].plot(y_hours, fgr[10, :], label='5 cm fgr')
+ax[2, 0].set_title('Facet Growth Rate')
+ax[2, 0].set_xlabel('Time [h]')
+ax[2, 0].set_ylabel('Facet Growth Rate [nm/s]')
+ax[2, 0].legend()
+ax[2, 0].grid(alpha=0.5)
+
+# Net Growth plot
+ax[2, 1].plot(net_growth, x[0:-1], label='Net Growth')
+ax[2, 1].set_title('Net Facet Growth')
+ax[2, 1].set_xlabel('Net Growth [mm]')
+ax[2, 1].set_ylabel('Depth [cm]')
+ax[2, 1].invert_yaxis()
+ax[2, 1].grid(alpha=0.5)
+
+#Net Growth near surface
+ax[2, 2].plot(net_growth[:pld], x[0:pld], label='Net growth near surface')
+ax[2, 2].set_title('Net Facet Growth Near Surface')
+ax[2, 2].set_xlabel('Net Growth [mm]')
+ax[2, 2].set_ylabel('Depth [cm]')
+ax[2, 2].invert_yaxis()
+ax[2, 2].grid(alpha=0.5)
+
+
+plt.tight_layout()
+plt.show()
+
