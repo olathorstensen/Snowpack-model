@@ -1,10 +1,8 @@
 ### 1D snowpack temperature simulator ###
-# v1.10 
+# v1.11 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
-#   - Added beautiful sliders
-#   - Added big end figure
-#   - Added fig for paper
+#   - Adjusting fig for paper
  
     
 import numpy as np
@@ -354,31 +352,49 @@ ax[2, 2].grid(alpha=0.5)
 plt.tight_layout()
 plt.show()
 
+#%%
+
 ### Figure for the paper
 fig3, ax3 = plt.subplots(1, 2, figsize = (12, 6), gridspec_kw={'width_ratios': [2, 1]})
 # Temperature plot
 cmap = plt.get_cmap("tab20")  # Alternatives: "viridis", "plasma", "tab10", "tab20", "Set3"
 colors = [cmap(i / len(np.arange(0, ny+1, h*pisp))) for i in range(len(np.arange(0, ny+1, h*pisp)))]
 
+
 for i, p in enumerate(np.arange(0, ny+1, h*pisp)):
-    ax3[0].plot(temp[:pld, p], x[:pld], label=f'{y_t[p]}', color=colors[i])
-ax3[0].set_xlabel('Temperature [°C]')
-ax3[0].set_ylabel('Depth [cm]')
+    time_only = (base_time + timedelta(seconds=y_sec[p])).strftime("%H:%M")  # Extract only time
+    ax3[0].plot(temp[:pld, p], x[:pld], label=f'{time_only}', color=colors[i])
+ax3[0].set_xlabel('Temperature [°C]', fontsize = 14)
+ax3[0].set_ylabel('Depth [cm]', fontsize = 14)
 ax3[0].invert_yaxis()
-ax3[0].legend(fontsize=11)
+ax3[0].legend(fontsize=13)
 ax3[0].grid(alpha=0.5)
 ax3[0].set_xticks(xticks)
 ax3[0].xaxis.set_label_position('top')
 ax3[0].xaxis.tick_top()  
+ax3[0].text(-0.115, 0.835, "a)", 
+           fontsize=15, 
+           # fontweight='bold', 
+           transform=ax[0].transAxes,  # Use axis-relative coordinates
+           verticalalignment='top', 
+           horizontalalignment='left', 
+           bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
 
 # Net growth near surface
 ax3[1].plot(net_growth[:pld], x[0:pld], label='Net growth near surface')
-ax3[1].set_xlabel("Net 'Facetedness' [mm]")
-ax3[1].set_ylabel('Depth [cm]')
+ax3[1].set_xlabel("Net 'Facetedness' [mm]", fontsize = 14)
+ax3[1].set_ylabel('Depth [cm]', fontsize = 14)
 ax3[1].invert_yaxis()
 ax3[1].grid(alpha=0.5)
 ax3[1].xaxis.set_label_position('top')
 ax3[1].xaxis.tick_top()
+ax3[1].text(-0.23, 0.835, "b)", 
+           fontsize=15, 
+           # fontweight='bold', 
+           transform=ax[1].transAxes,  # Use axis-relative coordinates
+           verticalalignment='top', 
+           horizontalalignment='left', 
+           bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
 
 
 
