@@ -1,21 +1,21 @@
 ### 1D snowpack temperature simulator ###
-# v1.2 
+# v1.3 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
-# - Pinzer and Schneebeli experiment
+# - Plotting for paper
 
 
 import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
-import plotly.graph_objects as go
+# import plotly.graph_objects as go
 
 ############################    Parameters   ############################ 
 runtime = 24             # Hours
 dt = 2                 # Time step [seconds] (Must be a divisor of 3600)
 depth = 0.02                # Snow depth from surface [m]
 dx = 0.001                # Dist. interval [m]
-pm = 2                   # USE INTEGERS. Give hourly plot rate
+pisp = 2                   # USE INTEGERS. Give hourly plot rate
 
 
 spin_up = 0            # [0] No spin-up, [1] Run spin-up
@@ -229,7 +229,7 @@ net_growth = np.sum(fg, axis = 1)
 
 # # Temp
 # fig = go.Figure()
-# for p in np.arange(0, ny+1, h*pm):
+# for p in np.arange(0, ny+1, h*pisp):
 #     fig.add_trace(go.Scatter(x=temp[:, p], y=x, mode='lines', name=f'Time {y_t[p]}'))
 
 # fig.update_layout(
@@ -240,7 +240,7 @@ net_growth = np.sum(fg, axis = 1)
 
 # # Vapor pressure
 # fig = go.Figure()
-# for p in np.arange(0, ny+1, h*pm):
+# for p in np.arange(0, ny+1, h*pisp):
 #     fig.add_trace(go.Scatter(x=vp[:, p], y=x, mode='lines', name=f'Time {y_t[p]}'
 #     ))
 
@@ -320,7 +320,7 @@ plt.show()
 
 # Temp
 plt.figure(figsize=(9, 6))
-for p in np.arange(0, ny+1, h*pm):
+for p in np.arange(0, ny+1, h*pisp):
     plt.plot(temp[:, p], x, label=f'Time {y_t[p]}')
 plt.title('Temperature')
 plt.xlabel('Temperature [°C]')
@@ -332,7 +332,7 @@ plt.show()
 
 # Vapor pressure
 plt.figure(figsize=(9, 6))
-for p in np.arange(0, ny+1, h*pm):
+for p in np.arange(0, ny+1, h*pisp):
     plt.plot(vp[:, p], x, label=f'Time {y_t[p]}')
 plt.title('Vapor Pressure')
 plt.xlabel('Vapor Pressure [mb]')
@@ -394,3 +394,41 @@ plt.ylabel('Depth [cm]')
 plt.gca().invert_yaxis()  # Reverse the y-axis for depth
 plt.grid(True, alpha=0.5)
 plt.show()
+
+#%%
+### Figure for the paper
+fig, ax = plt.subplots(1, 2, figsize = (12, 6), gridspec_kw={'width_ratios': [2, 1]})
+
+# Facet growth rate
+ax[0].plot(y, fgr[0, :], label='Surface')
+ax[0].plot(y, fgr[-1, :], label='Base')
+ax[0].set_xlabel('Time [h]', fontsize = 14)
+ax[0].set_ylabel('Facet growth rate [nm/s]', fontsize = 14)
+ax[0].legend(fontsize=13)
+ax[0].grid(alpha=0.5)
+ax[0].set_xticks(np.arange(0, 25, 6))
+ax[0].xaxis.set_label_position('top')
+ax[0].xaxis.tick_top()
+ax[0].text(0.017, 0.98, "a)", 
+           fontsize=15, 
+           # fontweight='bold', 
+           transform=ax[0].transAxes,  # Use axis-relative coordinates
+           verticalalignment='top', 
+           horizontalalignment='left', 
+           bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
+
+# Net growth near surface
+ax[1].plot(net_growth, x[0:-1]+dx*100/2, label='Net growth')
+ax[1].set_xlabel("Net 'Facetedness' [mm]", fontsize = 14)
+ax[1].set_ylabel('Depth [cm]', fontsize = 14)
+ax[1].invert_yaxis()
+ax[1].grid(alpha=0.5)
+ax[1].xaxis.set_label_position('top')
+ax[1].xaxis.tick_top()
+ax[1].text(0.035, 0.98, "b)", 
+           fontsize=15, 
+            # fontweight='bold', 
+           transform=ax[1].transAxes,  # Use axis-relative coordinates
+           verticalalignment='top', 
+           horizontalalignment='left', 
+           bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
