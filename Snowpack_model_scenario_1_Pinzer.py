@@ -1,8 +1,8 @@
 ### 1D snowpack temperature simulator ###
-# v1.4 
+# v1.5 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
-# - Updated density and conductivity
+# - Added staggered x axis
 
 
 import numpy as np
@@ -87,6 +87,7 @@ fg =  np.zeros([nx, ny+1])    # Facet growth grid
 
     # Axis and time
 x = np.linspace(0, depth*100, nx+1) # Depth axis
+x_stag = x[:-1]+dx*100/2            # Staggered x axis for vpg, fgr, fg, and ng
 y = np.round( np.arange(0, ny+1, 1) * dt/3600 , 2) # Time axis
 base_time = datetime.strptime("00:00", "%H:%M")
 y_t = [(base_time + timedelta(hours=hour)).strftime("%H:%M") for hour in y]
@@ -416,7 +417,7 @@ ax[0].text(0.017, 0.98, "a)",
            bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
 
 # Net growth near surface
-ax[1].plot(net_growth, x[0:-1]+dx*100/2, label='Net growth')
+ax[1].plot(net_growth, x_stag, label='Net growth')
 ax[1].set_xlabel("Net 'Facetedness' [mm]", fontsize = 14)
 ax[1].set_ylabel('Depth [cm]', fontsize = 14)
 ax[1].invert_yaxis()
