@@ -1,8 +1,8 @@
 ### 1D snowpack temperature simulator ###
-# v1.3 
+# v1.4 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
-# - Plotting for paper
+# - Updated density and conductivity
 
 
 import numpy as np
@@ -11,20 +11,18 @@ from datetime import datetime, timedelta
 # import plotly.graph_objects as go
 
 ############################    Parameters   ############################ 
-runtime = 24             # Hours
-dt = 2                 # Time step [seconds] (Must be a divisor of 3600)
-depth = 0.02                # Snow depth from surface [m]
-dx = 0.001                # Dist. interval [m]
-pisp = 2                   # USE INTEGERS. Give hourly plot rate
-
-
+runtime = 24           # Hours
+dt = 1                 # Time step [seconds] (Must be a divisor of 3600)
+depth = 0.02           # Snow depth from surface [m]
+dx = 0.001             # Dist. interval [m]
+pisp = 1               # USE INTEGERS. Give hourly plot rate
 spin_up = 0            # [0] No spin-up, [1] Run spin-up
-sp_runtime = 24*7        # Spin-up run time [Hours]
-plot_depth = 0.35           # Depth shown in plots [m]
+sp_runtime = 24*7      # Spin-up run time [Hours]
+plot_depth = 0         # Depth shown in plots [m]
 
 
 ############################    Constants   ############################   
-k = 0.1                  # Thermal conductivity snow [W/m K]
+k = 0.1439               # Thermal conductivity snow [W/m K]
 rho = 245                # density [kg/m3]
 cp = 2090                # Specific heat capacity of ice [J/kg C]
 T0 = 273.16              # Ice-point temperature [K]
@@ -306,94 +304,94 @@ net_growth = np.sum(fg, axis = 1)
 #     yaxis=dict(autorange='reversed'))
 # fig.show()
 
-############## Matplotlib
-# BC
-plt.figure(figsize=(9, 6))
-plt.plot(y, bc, label='Surface bc')
-plt.plot(y, b_bc, label='Bottom bc')
-plt.title('Temperature Boundary Conditions')
-plt.xlabel('Hours')
-plt.ylabel('Temperature [°C]')
-plt.legend(title='Legend')
-plt.grid(True, alpha=0.5)
-plt.show()
+# ############## Matplotlib
+# # BC
+# plt.figure(figsize=(9, 6))
+# plt.plot(y, bc, label='Surface bc')
+# plt.plot(y, b_bc, label='Bottom bc')
+# plt.title('Temperature Boundary Conditions')
+# plt.xlabel('Hours')
+# plt.ylabel('Temperature [°C]')
+# plt.legend(title='Legend')
+# plt.grid(True, alpha=0.5)
+# plt.show()
 
-# Temp
-plt.figure(figsize=(9, 6))
-for p in np.arange(0, ny+1, h*pisp):
-    plt.plot(temp[:, p], x, label=f'Time {y_t[p]}')
-plt.title('Temperature')
-plt.xlabel('Temperature [°C]')
-plt.ylabel('Depth [cm]')
-plt.gca().invert_yaxis()
-plt.legend(fontsize=8)
-plt.grid(True, alpha=0.5)
-plt.show()
+# # Temp
+# plt.figure(figsize=(9, 6))
+# for p in np.arange(0, ny+1, h*pisp):
+#     plt.plot(temp[:, p], x, label=f'Time {y_t[p]}')
+# plt.title('Temperature')
+# plt.xlabel('Temperature [°C]')
+# plt.ylabel('Depth [cm]')
+# plt.gca().invert_yaxis()
+# plt.legend(fontsize=8)
+# plt.grid(True, alpha=0.5)
+# plt.show()
 
-# Vapor pressure
-plt.figure(figsize=(9, 6))
-for p in np.arange(0, ny+1, h*pisp):
-    plt.plot(vp[:, p], x, label=f'Time {y_t[p]}')
-plt.title('Vapor Pressure')
-plt.xlabel('Vapor Pressure [mb]')
-plt.ylabel('Depth [cm]')
-plt.gca().invert_yaxis()
-plt.grid(True, alpha=0.5)
-plt.legend()
-plt.show()
+# # Vapor pressure
+# plt.figure(figsize=(9, 6))
+# for p in np.arange(0, ny+1, h*pisp):
+#     plt.plot(vp[:, p], x, label=f'Time {y_t[p]}')
+# plt.title('Vapor Pressure')
+# plt.xlabel('Vapor Pressure [mb]')
+# plt.ylabel('Depth [cm]')
+# plt.gca().invert_yaxis()
+# plt.grid(True, alpha=0.5)
+# plt.legend()
+# plt.show()
 
-plt.figure(figsize=(9, 6))
-plt.plot(y, vp[0, :], label='Surface vp')
-plt.plot(y, vp[-1, :], label='Bottom vp')
-plt.title('Vapor Pressure')
-plt.xlabel('Time [h]')
-plt.ylabel('Vapor Pressure [mb]')
-plt.legend()
-plt.grid(True, alpha=0.5)
-plt.show()
+# plt.figure(figsize=(9, 6))
+# plt.plot(y, vp[0, :], label='Surface vp')
+# plt.plot(y, vp[-1, :], label='Bottom vp')
+# plt.title('Vapor Pressure')
+# plt.xlabel('Time [h]')
+# plt.ylabel('Vapor Pressure [mb]')
+# plt.legend()
+# plt.grid(True, alpha=0.5)
+# plt.show()
 
-# VPG
-plt.figure(figsize=(9, 6))
-plt.plot(y, vpg[0, :], label='Surface vpg')
-plt.plot(y, vpg[-1, :], label='Bottom vpg')
-plt.title('Vapor Pressure Gradient')
-plt.xlabel('Time [h]')
-plt.ylabel('Vapor Pressure Gradient [Pa/cm]')
-plt.legend(title='Legend')
-plt.grid(True, alpha=0.5)
-plt.show()
+# # VPG
+# plt.figure(figsize=(9, 6))
+# plt.plot(y, vpg[0, :], label='Surface vpg')
+# plt.plot(y, vpg[-1, :], label='Bottom vpg')
+# plt.title('Vapor Pressure Gradient')
+# plt.xlabel('Time [h]')
+# plt.ylabel('Vapor Pressure Gradient [Pa/cm]')
+# plt.legend(title='Legend')
+# plt.grid(True, alpha=0.5)
+# plt.show()
 
-# Growth rate
-plt.figure(figsize=(9, 6))
-plt.plot(y, fgr[0, :], label='Surface fgr')
-plt.plot(y, fgr[-1, :], label='Bottom fgr')
-plt.title('Facet Growth Rate')
-plt.xlabel('Time [h]')
-plt.ylabel('Facet Growth Rate [nm/s]')
-plt.legend(title='Legend')
-plt.grid(True, alpha=0.5)
-plt.show()
+# # Growth rate
+# plt.figure(figsize=(9, 6))
+# plt.plot(y, fgr[0, :], label='Surface fgr')
+# plt.plot(y, fgr[-1, :], label='Bottom fgr')
+# plt.title('Facet Growth Rate')
+# plt.xlabel('Time [h]')
+# plt.ylabel('Facet Growth Rate [nm/s]')
+# plt.legend(title='Legend')
+# plt.grid(True, alpha=0.5)
+# plt.show()
 
-# Growth 
-plt.figure(figsize=(9, 6))
-plt.plot(y, fg[0, :], label='Surface fg')
-plt.plot(y, fg[-1, :], label='Bottom fg')
-plt.title('Facet Growth')
-plt.xlabel('Time [h]')
-plt.ylabel('Facet Growth [mm]')
-plt.legend(title='Legend')
-plt.grid(True, alpha=0.5)
-plt.show()
+# # Growth 
+# plt.figure(figsize=(9, 6))
+# plt.plot(y, fg[0, :], label='Surface fg')
+# plt.plot(y, fg[-1, :], label='Bottom fg')
+# plt.title('Facet Growth')
+# plt.xlabel('Time [h]')
+# plt.ylabel('Facet Growth [mm]')
+# plt.legend(title='Legend')
+# plt.grid(True, alpha=0.5)
+# plt.show()
 
-# Net growth
-plt.figure(figsize=(9, 6))
-plt.plot(net_growth, x[0:-1], label='Net Growth')
-plt.title('Net Facet Growth')
-plt.xlabel('Net Growth [mm]')
-plt.ylabel('Depth [cm]')
-plt.gca().invert_yaxis()  # Reverse the y-axis for depth
-plt.grid(True, alpha=0.5)
-plt.show()
+# # Net growth
+# plt.figure(figsize=(9, 6))
+# plt.plot(net_growth, x[0:-1], label='Net Growth')
+# plt.title('Net Facet Growth')
+# plt.xlabel('Net Growth [mm]')
+# plt.ylabel('Depth [cm]')
+# plt.gca().invert_yaxis()  # Reverse the y-axis for depth
+# plt.grid(True, alpha=0.5)
+# plt.show()
 
 #%%
 ### Figure for the paper
