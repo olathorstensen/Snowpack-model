@@ -1,8 +1,8 @@
 ### 1D snowpack temperature simulator ###
-# v1.11 
+# v1.2 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
-#   - Adjusting fig for paper
+#   - Small fixes
  
     
 import numpy as np
@@ -14,20 +14,19 @@ start_time = time.time()
 
 ############################    Parameters   ############################ 
 runtime = 24             # Hours
-dt = 30                 # Time step [seconds] (Must be a divisor of 3600)
+dt = 30                  # Time step [seconds] (Must be a divisor of 3600)
 depth = 1                # Snow depth from surface [m]
-dx = 0.005                # Dist. interval [m]
-pisp = 2                   # USE INTEGERS. Give hourly plot rate
+dx = 0.005               # Dist. interval [m]
+pisp = 2                 # USE INTEGERS. Give hourly plot rate
 b_bc = 0                 # Bottom boundary condition, fixed [°C]
-
-spin_up = 1            # [0] No spin-up, [1] Run spin-up
+spin_up = 1              # [0] No spin-up, [1] Run spin-up
 sp_runtime = 24*7        # Spin-up run time [Hours]
-plot_depth = 0.35           # Depth shown in plots [m]
+plot_depth = 0.35        # Depth shown in plots [m]
 
 
 ############################    Constants   ############################   
-k = 0.1                  # Thermal conductivity snow [W/m K]
-rho = 200                # density [kg/m3]
+k = 0.1439               # Thermal conductivity snow [W/m K]
+rho = 245                # density [kg/m3]
 cp = 2090                # Specific heat capacity of ice [J/kg °C]
 T0 = 273.16              # Ice-point temperature [K]
 a = k/(rho*cp)           # Thermal diffusivity [m2/s]
@@ -133,7 +132,7 @@ temp[-1,:] = b_bc * np.ones(ny+1, dtype=float)  #Fixed bottom bc
     
         
 # Prints of shapes and numbers (all are numbers and none are shapes)
-print('r_number:', r)
+print('r_number (should be less than 0.5):', r)
 print('a_number:', a)
 print('h_number:', h)
 print('x', x.shape)
@@ -173,7 +172,8 @@ if spin_up == 1:
 
           
     ic = sp_temp[:, -1]
-    temp[:,0] = ic      
+    temp[:,0] = ic
+ 
 
 
 
@@ -353,6 +353,9 @@ plt.tight_layout()
 plt.show()
 
 #%%
+xticks = np.arange(0,-20,-2) #FIX change x-scale by MAX-MIN insted of fixed values
+pld = int(plot_depth/dx)
+time_steps = ny + 1
 
 ### Figure for the paper
 fig3, ax3 = plt.subplots(1, 2, figsize = (12, 6), gridspec_kw={'width_ratios': [2, 1]})
@@ -372,10 +375,10 @@ ax3[0].grid(alpha=0.5)
 ax3[0].set_xticks(xticks)
 ax3[0].xaxis.set_label_position('top')
 ax3[0].xaxis.tick_top()  
-ax3[0].text(-0.115, 0.835, "a)", 
+ax3[0].text(-0.09, 0.985, "a)", 
            fontsize=15, 
            # fontweight='bold', 
-           transform=ax[0].transAxes,  # Use axis-relative coordinates
+           transform=ax3[0].transAxes,  # Use axis-relative coordinates
            verticalalignment='top', 
            horizontalalignment='left', 
            bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
@@ -388,10 +391,10 @@ ax3[1].invert_yaxis()
 ax3[1].grid(alpha=0.5)
 ax3[1].xaxis.set_label_position('top')
 ax3[1].xaxis.tick_top()
-ax3[1].text(-0.23, 0.835, "b)", 
+ax3[1].text(-0.18, 0.985, "b)", 
            fontsize=15, 
            # fontweight='bold', 
-           transform=ax[1].transAxes,  # Use axis-relative coordinates
+           transform=ax3[1].transAxes,  # Use axis-relative coordinates
            verticalalignment='top', 
            horizontalalignment='left', 
            bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
