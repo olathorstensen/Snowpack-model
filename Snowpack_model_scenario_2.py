@@ -1,12 +1,15 @@
 ### 1D snowpack temperature simulator ###
-# v1.2 
+# v1.3 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
-#   - Small fixes
+#   - Staggered grid for net growth plot
+#   - Added write net_growth to file
  
     
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
+import os
 from matplotlib.widgets import Slider
 from datetime import datetime, timedelta
 import time
@@ -22,6 +25,7 @@ b_bc = 0                 # Bottom boundary condition, fixed [°C]
 spin_up = 1              # [0] No spin-up, [1] Run spin-up
 sp_runtime = 24*7        # Spin-up run time [Hours]
 plot_depth = 0.35        # Depth shown in plots [m]
+ng_to_file = 1           # Writes net_growth to file
 
 
 ############################    Constants   ############################   
@@ -92,6 +96,7 @@ fg =  np.zeros([nx, ny], dtype=float)    # Facet growth grid
 
     # Axis and time
 x = np.linspace(0, depth*100, nx+1) # Depth axis
+x_stag = x[:-1]+dx*100/2            # Staggered x axis for vpg, fgr, fg, and ng
 y = np.round(np.arange(0, ny+1, 1) *dt) #/3600) # Time axis in sec (divide by 3600 for h)
 y_sec = y.astype(float)
 y_hours = np.round(np.arange(0, ny+1, 1) *dt)/3600
@@ -201,7 +206,20 @@ for iy in np.arange(0, ny, dtype=int):
 
 net_growth = np.sum(fg, axis = 1)
 
-###################################################################
+############################    Data output   ############################ 
+
+current_dir = os.path.dirname(os.path.abspath(__file__)) 
+if ng_to_file == 1:
+    output_file = os.path.join(current_dir, 'Net_growth_data.xlsx')
+    data_titles = [f"Net growth after {sp_y[-1]} hours"]
+    data = {
+        data_titles[0]: net_growth,
+        }
+    df = pd.DataFrame(data)
+    df.to_excel(output_file, index=False)
+    print("Wrote to file:", output_file)
+
+#########################################################################
 
 end_time = time.time()
 print(f"Simulation complete. Runtime: {(end_time-start_time):.2f} seconds")
@@ -353,19 +371,20 @@ plt.tight_layout()
 plt.show()
 
 #%%
+### Figure for the paper
 xticks = np.arange(0,-20,-2) #FIX change x-scale by MAX-MIN insted of fixed values
 pld = int(plot_depth/dx)
 time_steps = ny + 1
 
-### Figure for the paper
 fig3, ax3 = plt.subplots(1, 2, figsize = (12, 6), gridspec_kw={'width_ratios': [2, 1]})
+
 # Temperature plot
 cmap = plt.get_cmap("tab20")  # Alternatives: "viridis", "plasma", "tab10", "tab20", "Set3"
 colors = [cmap(i / len(np.arange(0, ny+1, h*pisp))) for i in range(len(np.arange(0, ny+1, h*pisp)))]
 
 
 for i, p in enumerate(np.arange(0, ny+1, h*pisp)):
-    time_only = (base_time + timedelta(seconds=y_sec[p])).strftime("%H:%M")  # Extract only time
+    time_only = (base_time + timedelta(seconds=y_sec[p])).strftime("%H:%M")
     ax3[0].plot(temp[:pld, p], x[:pld], label=f'{time_only}', color=colors[i])
 ax3[0].set_xlabel('Temperature [°C]', fontsize = 14)
 ax3[0].set_ylabel('Depth [cm]', fontsize = 14)
@@ -378,13 +397,13 @@ ax3[0].xaxis.tick_top()
 ax3[0].text(-0.09, 0.985, "a)", 
            fontsize=15, 
            # fontweight='bold', 
-           transform=ax3[0].transAxes,  # Use axis-relative coordinates
+           transform=ax3[0].transAxes,
            verticalalignment='top', 
            horizontalalignment='left', 
            bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
 
 # Net growth near surface
-ax3[1].plot(net_growth[:pld], x[0:pld], label='Net growth near surface')
+ax3[1].plot(net_growth[:pld], x_stag[0:pld])
 ax3[1].set_xlabel("Net 'Facetedness' [mm]", fontsize = 14)
 ax3[1].set_ylabel('Depth [cm]', fontsize = 14)
 ax3[1].invert_yaxis()
@@ -394,7 +413,7 @@ ax3[1].xaxis.tick_top()
 ax3[1].text(-0.18, 0.985, "b)", 
            fontsize=15, 
            # fontweight='bold', 
-           transform=ax3[1].transAxes,  # Use axis-relative coordinates
+           transform=ax3[1].transAxes,
            verticalalignment='top', 
            horizontalalignment='left', 
            bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
