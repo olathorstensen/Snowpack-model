@@ -1,13 +1,8 @@
 ### 1D snowpack temperature simulator ###
-# v3.2 Scenario 3 and 4 
+# v3.3 Scenario 3 and 4 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
-#   - T1 and T2 lapse rate scaling
-#   - SW scaling (SC4)
-#   - Sensbile heat calc (SC3 & SC4)
-
-#TODO
-#   - Use measured SW in SC4
+#   - Fig update SC 3
 
 
 
@@ -35,7 +30,7 @@ import time
 start_time = time.time()
 
 ############################    Parameters   ############################ 
-runtime = 24*3             # Hours (int)
+runtime = 24*1            # Hours (int)
 dt = 30                   # Time step [seconds] (Must be a divisor of 3600) For Sc. 4 use 30s or 60s
 dx = 0.005                # Dist. interval [m]
 depth = 1                 # Snow depth from surface [m]
@@ -44,21 +39,21 @@ pisp = 2                  # Plot interval spacer [hours] (int)
 plot_depth = 0.35         # Depth shown in plots measured from surface [m]
 
 spin_up = 0              # [0] No spin-up, [1] Run spin-up
-sp_runtime = 24*7        # Spin-up run time [Hours]
+sp_runtime = 24*14        # Spin-up run time [Hours]
 sp_pisp = 24              # Spin-up Plot interval spacer [hours] (int)
 
-load_ic = 0               # Load IC from file [0] No, [1] Yes
-ic_to_file = 1            # Writes model IC to file. If spin-up[1] -> IC given by end of spin-up temp. [0] No, [1] Yes
+load_ic = 1               # Load IC from file [0] No, [1] Yes
+ic_to_file = 0            # Writes model IC to file. If spin-up[1] -> IC given by end of spin-up temp. [0] No, [1] Yes
 data_to_file = 0          # Write radiation and atm temp data to new file (spin-up excluded) [0] No, [1] Yes
 
 bc_type = 0               # [0] Dirichlet (fixed), [1] Neumann (ghost cell)
-scenario = 4              # Choose scenario [3],[4] Not fully working yet...
+scenario = 3              # Choose scenario [3],[4] Not fully working yet...
 cold_T = 1                # For SC3, use [0] for org T temp, use [1] for 700m incresed elevation
 window_size = 30          # Rolling window for radiometer data noice reduction
 
-ng_title = 'IC'           # Title for Net_growth dataframe
-run_number = 1            # Must conduct one inital run with [1]
-ic_scaling = 1            # Scales IC e.g. 0.7 = -30% scaling
+ng_title = 'IC +30%'           # Title for Net_growth dataframe
+run_number = 2            # Must conduct one inital run with [1]
+ic_scaling = 1           # Scales IC e.g. 0.7 = -30% scaling
 
 ############################    Constants   ############################ 
 
@@ -171,10 +166,16 @@ if run_number < 2:
         SW_scaling = np.array(df_s.iloc[:,0].values, dtype=float)
         
         SW_scaled = SW_net * SW_scaling
-
+        
+    else:
+        input_file = os.path.join(current_dir, 'Net_growth_data.xlsx')
+        print("File loaded:", input_file)
+        df_ng = pd.read_excel(input_file, header=0)
+        
         
 else:
     print('Variable run_number > 1, Radiometer and Tinytag data not loaded')
+    
 
 ###########################    Functions    ###########################
 def Solar_rad(h_angle, iy):
@@ -424,15 +425,20 @@ elif scenario == 3:
 
 for iy in np.arange(1, ny+1, dtype=int):       
     for ix in np.arange(1 if bc_type == 0 else 0, nx, dtype=int):
-        sw_in = Solar_rad(hour_angle[iy], iy)
-        if ix == 0 and scenario == 3:
-            #Surface temp. calc.
-            ghost_cell[iy-1] = Heat_flux_surface(y[iy], ix, iy, temp, sw_in)
-            temp[ix, iy] = Heat_flow(ix, iy, temp, bc_type, ghost_cell) + latent[ix, iy-1] 
-        else:
-            # Snowpack temp. calc.
-            temp[ix, iy] = Heat_flow(ix, iy, temp, bc_type, ghost_cell) + Solar_extinction(x[ix],sw_in) + latent[ix, iy-1]           
-            
+        
+        if scenario == 3:
+            sw_in = Solar_rad(hour_angle[iy], iy)
+            if ix == 0:
+                #Surface temp. calc.
+                ghost_cell[iy-1] = Heat_flux_surface(y[iy], ix, iy, temp, sw_in)
+                temp[ix, iy] = Heat_flow(ix, iy, temp, bc_type, ghost_cell) + latent[ix, iy-1] 
+            else:
+                # Snowpack temp. calc.
+                temp[ix, iy] = Heat_flow(ix, iy, temp, bc_type, ghost_cell) + Solar_extinction(x[ix],sw_in) + latent[ix, iy-1]  
+                
+        elif scenario == 4:
+            temp[ix, iy] = Heat_flow(ix, iy, temp, bc_type, ghost_cell) + Solar_extinction(x[ix],SW_scaled[iy]) + latent[ix, iy-1]
+              
         latent[ix, iy] = Latent_heat(temp[ix, iy])
         if temp[ix, iy] > 0:
             temp[ix, iy] = 0
@@ -494,7 +500,7 @@ if data_to_file == 1:
     df.to_excel(output_file, index=False)
     print("Wrote to file:", output_file)
     
-if ic_to_file == 1:
+if ic_to_file == 1 and spin_up_has_occurred == 1:
     #Write end-state to file for IC
     output_file2 = os.path.join(current_dir, 'IC_data.xlsx')
     data_titles2 = [f"Spin-up temp after {sp_y[-1]} hours"]
@@ -510,17 +516,19 @@ if ic_to_file == 1:
 # Net growth to df
 if run_number == 1:
     ng_data1 = {ng_title: net_growth,}
-    ng_hub = pd.DataFrame(ng_data1)
+    ng_df1 = pd.DataFrame(ng_data1)
+    ng_hub = pd.concat([df_ng, ng_df1], axis=1)
 
 else:    
     ng_data2 = {ng_title: net_growth}
     ng_df2 = pd.DataFrame(ng_data2)
     ng_hub = pd.concat([ng_hub, ng_df2], axis=1)
+print('ng_hub', ng_hub.columns)
 # Join the DataFrames by columns
 
 
-temp_mean = np.mean(temp[0,2881:-1])
-print('Diurnal mean surface temperature', temp_mean)
+#temp_mean = np.mean(temp[0,2881:-1])
+#print('Diurnal mean surface temperature', temp_mean)
 
 end_time = time.time()
 print(f"Simulation complete. Runtime: {(end_time-start_time):.2f} seconds")
@@ -565,8 +573,8 @@ else:
     plt.plot(y,  solar_array[4,:], label= "Calc SW net") # Plot every whole hour    
     plt.plot(y, SW_net, label= "Measured SW net") # Plot every whole hour 
     plt.plot(y, SW_scaled, label= "Scaled SW net") # Plot every whole hour
-    #plt.plot(y, LW_net, label= "Calc LW out") # Plot every whole hour 
-    #plt.plot(y, sensible_heat, label= "Calc sensible heat") # Plot every whole hour
+    plt.plot(y, LW_net, label= "Calc LW out") # Plot every whole hour 
+    plt.plot(y, sensible_heat, label= "Calc sensible heat") # Plot every whole hour
     plt.title('Shortwave rad')
     plt.xlabel('sec')
     plt.ylabel('W/m2')
@@ -773,6 +781,46 @@ ax[2, 2].grid(alpha=0.5)
 plt.tight_layout()
 plt.show()
 #%%
+
+# PAPER FIGURE SC3
+xticks = np.arange(0,-20,-2) #FIX change x-scale by MAX-MIN insted of fixed values
+pld = int(plot_depth/dx)
+fig, ax = plt.subplots(1, 2, figsize = (12, 6), gridspec_kw={'width_ratios': [2, 1]})
+#Temperature plot
+cmap = plt.get_cmap("tab20")  # Alternatives: "viridis", "plasma", "tab10", "tab20", "Set3"
+colors = [cmap(i / len(np.arange(0, h*24, h*pisp))) for i in range(len(np.arange(0, h*24, h*pisp)))]
+
+
+for i, p in enumerate(np.arange(0, h*24, h*pisp)):
+    time_only = (base_time + timedelta(seconds=y_sec[p])).strftime("%H:%M")
+    ax[0].plot(temp[:pld, p], x[:pld], label=time_only, color=colors[i])
+
+ax[0].set_xlabel('Temperature [°C]')
+ax[0].set_ylabel('Depth [cm]')
+ax[0].invert_yaxis()
+ax[0].legend(fontsize=11)
+ax[0].grid(alpha=0.5)
+ax[0].set_xticks(xticks)
+ax[0].xaxis.set_label_position('top')
+ax[0].xaxis.tick_top()
+
+#Net growth near surface
+colors = ['black', 'black', 'green', 'blue', 'red' ]
+for i, column in enumerate(ng_hub.columns):
+    linestyle = ':' if i == 0 else '--' if i > 2 else '-'  # First column dotted, others solid
+    ax[1].plot(ng_hub[column][:pld], x[:pld], label=column, linestyle=linestyle, color=colors[i])
+    
+ax[1].legend(fontsize=11)
+ax[1].set_xlabel("Net 'Facetedness' [mm]")
+ax[1].set_ylabel('Depth [cm]')
+ax[1].invert_yaxis()
+ax[1].grid(alpha=0.5)
+ax[1].xaxis.set_label_position('top')
+ax[1].xaxis.tick_top()
+
+#%%
+
+# PAPER FIGURE SC4
 xticks = np.arange(0,-20,-2) #FIX change x-scale by MAX-MIN insted of fixed values
 pld = int(plot_depth/dx)
 fig, ax = plt.subplots(1, 2, figsize = (12, 6), gridspec_kw={'width_ratios': [2, 1]})
