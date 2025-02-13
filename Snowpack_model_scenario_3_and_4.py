@@ -1,15 +1,18 @@
 ### 1D snowpack temperature simulator ###
-# v3.1 Scenario 3 and 4 
+# v3.2 Scenario 3 and 4 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
-#   - Net growth hub
-#   - ic scaling and run number
+#   - T1 and T2 lapse rate scaling
+#   - SW scaling (SC4)
+#   - Sensbile heat calc (SC3 & SC4)
+#   - Use measured SW in SC4
+
+
 
 
 
 # Comment: 
 #   - TODO Change color for temp plot,
-#     add increasing density with depth (maybe), make plot code more compact (itr list)
 #   - Instenses to looked at marked with "FIX"
 #   - ic_to file can not be 1 if spin_up is 0
 #   - Need to plot the x axis 0.5dx off for vpg, fgr, fg and net_growth
@@ -30,35 +33,35 @@ import time
 start_time = time.time()
 
 ############################    Parameters   ############################ 
-runtime = 24*3              # Hours (int)
+runtime = 24*3             # Hours (int)
 dt = 30                   # Time step [seconds] (Must be a divisor of 3600) For Sc. 4 use 30s or 60s
-dx = 0.005                 # Dist. interval [m]
+dx = 0.005                # Dist. interval [m]
 depth = 1                 # Snow depth from surface [m]
 b_bc = 0                  # Bottom boundary condition, fixed [°C]
 pisp = 2                  # Plot interval spacer [hours] (int)
 plot_depth = 0.35         # Depth shown in plots measured from surface [m]
-# Spin up
-spin_up = 0               # [0] No spin-up, [1] Run spin-up
-sp_runtime = 24*7         # Spin-up run time [Hours]
-sp_pisp = 24              # Spin-up Plot interval spacer [hours] (int)
-# Data and files
 
-load_ic = 1               # Load IC from file [0] No, [1] Yes
-ic_to_file = 0            # Writes model IC to file. If spin-up[1] -> IC given by end of spin-up temp. [0] No, [1] Yes
+spin_up = 1              # [0] No spin-up, [1] Run spin-up
+sp_runtime = 24*7        # Spin-up run time [Hours]
+sp_pisp = 24              # Spin-up Plot interval spacer [hours] (int)
+
+load_ic = 0               # Load IC from file [0] No, [1] Yes
+ic_to_file = 1            # Writes model IC to file. If spin-up[1] -> IC given by end of spin-up temp. [0] No, [1] Yes
 data_to_file = 0          # Write radiation and atm temp data to new file (spin-up excluded) [0] No, [1] Yes
 
 bc_type = 0               # [0] Dirichlet (fixed), [1] Neumann (ghost cell)
 scenario = 4              # Choose scenario [3],[4] Not fully working yet...
+cold_T = 1                # For SC3, use [0] for org T temp, use [1] for 700m incresed elevation
 window_size = 30          # Rolling window for radiometer data noice reduction
 
-ng_title = 'IC +30%'      # Title for Net_growth dataframe
-run_number = 2            # Must conduct one inital run with [1]
+ng_title = 'IC'           # Title for Net_growth dataframe
+run_number = 1            # Must conduct one inital run with [1]
 ic_scaling = 1            # Scales IC e.g. 0.7 = -30% scaling
 
 ############################    Constants   ############################ 
 
     # Snow properties  
-k = 0.1439               # Thermal conductivity snow [W/m K]    
+k = 0.1439              # Thermal conductivity snow [W/m K]    0.1439
 rho = 245                # density [kg/m3] #277
 cp = 2090                # Specific heat capacity of ice [J/kg °C]
 T0 = 273.15              # Ice-point temperature [K]
@@ -71,15 +74,15 @@ h = int((3600/dt))       # Number of dt increments between each whole hour [1]
 lat = 61                 # Latitude [°]
 sw_con = 1361            # Solar constant [W/m2]
 sw_peak = 110            # Observed shortwave peak [W/m2] 
-sw_mod = 659.8259         # Theoretical peak shortwave [W/m2]
+sw_mod = 659.8259        # Theoretical peak shortwave [W/m2]
 sw_rr = sw_mod/sw_peak   # Reduction ratio
-sw_k = 50               # Solar extinction coefficient (k) 
+sw_k = 50                # Solar extinction coefficient (k) 
 
     # Sensible/latent/Longwave heat flux properties
 sigma = 5.67*10**-8      # Stefan-Boltzmann constant
 emis = 1                 # Snow emissivity 
 C = 0                    # Coefficient 
-A = k/dx/6.655           # A-variable
+A = k/dx/4.15             # A-variable #3.8  #6.655 org SC3
 B = sigma * emis         # B-variable
 T1_amp = 6               # T1 amplitude [°C]  #6
 T1_avg = -4              # T1 average temp. [°C]
@@ -105,7 +108,6 @@ if run_number < 2:
         
         
     if scenario  == 4:
-        
         # Radiometer data
         input_file = os.path.join(current_dir, 'Radiometer_data.xlsx')
         print("File loaded:", input_file)
@@ -138,7 +140,9 @@ if run_number < 2:
         # Convert from pandas to numpy
         rad_data = np.array(df_rf.iloc[:,5].values, dtype=float)
         SW_net = np.array(df_rf.iloc[:,1].values, dtype=float)
-        SW_net = np.where(SW_net<0, 0, SW_net)
+        SW_net = np.where(SW_net<0, 0, SW_net) #Removes negative values
+        LW_net = np.array(df_rf.iloc[:,2].values, dtype=float)
+  
     
         # Tinytag temperature data
         input_file = os.path.join(current_dir, 'Tinytag_data.xlsx')
@@ -156,6 +160,17 @@ if run_number < 2:
                 tinytag_A = np.array(df_tf.iloc[:,1].values, dtype=float)
             elif i == 'B':
                 tinytag_B = np.array(df_tf.iloc[:,1].values, dtype=float)
+                
+                
+        # SW scaling data - Works only for dt=30s
+        input_file = os.path.join(current_dir, 'CR674_scaling.csv')
+        print("File loaded:", input_file)
+        df_s = pd.read_csv(input_file, header=0)
+        SW_scaling = np.array(df_s.iloc[:,0].values, dtype=float)
+        
+        SW_scaled = SW_net * SW_scaling
+
+        
 else:
     print('Variable run_number > 1, Radiometer and Tinytag data not loaded')
 
@@ -192,23 +207,35 @@ def Heat_flux_surface(t, ix, iy, grid, sw_in) :
     iy = iy-1
     T = grid[ix, iy]        # Temp. surface
     T_dx = grid[ix+1, iy]   # Temp. x= +dx
-    T1 = -T1_amp * mt.cos( (2*mt.pi/(24*60*60)) * (t-T1_phase)) + T1_avg # Temp air
-    T2 = -T2_amp * mt.cos( (2*mt.pi/(24*60*60)) * (t-T2_phase)) + T2_avg # Temp atm   
-    #heat_flux = T+(C+A*(T1-T) - B*((T+T0)**4 - (T2+T0)**4))*(dx/k)               
+    if cold_T == 0:
+        T1 = -T1_amp * mt.cos( (2*mt.pi/(24*60*60)) * (t-T1_phase)) + T1_avg # Temp air org
+        T2 = -T2_amp * mt.cos( (2*mt.pi/(24*60*60)) * (t-T2_phase)) + T2_avg # Temp atm org 
+    else:
+        lr = (0.0065)*700 # laps rate -6.5 deg/1000m, up 'x' m
+        T1 = -T1_amp * mt.cos( (2*mt.pi/(24*60*60)) * (t-T1_phase)) + (T1_avg-lr) # Temp air colder, 
+        T2 = -T2_amp * mt.cos( (2*mt.pi/(24*60*60)) * (t-T2_phase)) + (T2_avg-(lr*0.36)) # Temp atm colder, 36% reduction in laps rate
+    
+    Q_sensible = C + A*(T1-T)
+    Q_LWout = -B * ((T + T0)**4 - (T2 + T0)**4) 
+    
     heat_flux = (
     T_dx 
-    + (C + A * (T1 - T) 
-        - B * ((T + T0)**4 - (T2 + T0)**4) 
-        + ((sw_in * mt.exp(-sw_k * 0)) 
-          - (sw_in * mt.exp(-sw_k * dx))))
+    + (Q_sensible
+     + Q_LWout 
+     + ((sw_in * mt.exp(-sw_k * 0)) 
+    - (sw_in * mt.exp(-sw_k * dx))))
     * (2*dx / k)
     )
+
+
     if spin_up == 0:
         # Writes input data to file apart from during spin-up
         T_array[0,iy] = T1
         T_array[1,iy] = T2
         T_array[2,iy] = heat_flux
         T_array[3,iy] = T
+        T_array[4,iy] = Q_sensible
+        T_array[5,iy] = Q_LWout
         
     return heat_flux
 
@@ -294,6 +321,7 @@ fg =  np.zeros([nx, ny], dtype=float)     # Facet growth grid
 
     # Axis and time
 x = np.linspace(0, depth*100, nx+1) # Depth axis [cm]
+x_stag = x[:-1]+dx*100/2            # Staggered x axis for vpg, fgr, fg, and ng
 y = np.round(np.arange(0, ny+1, 1) *dt) #/3600) # Time axis in sec (divide by 3600 for h)
 y_sec = y.astype(float)
 y_hours = np.round(np.arange(0, ny+1, 1) *dt)/3600
@@ -319,11 +347,11 @@ ghost_cell = np.zeros([ny+1], dtype=float)
 hour_angle = np.linspace(-204, 156, int(h * 24) + 1)
 hour_angle = Diurnal_array_reshape(hour_angle, runtime) #Extend or crops input to runtime length
 solar_array = np.zeros([6,ny+1], dtype=float) # Content: hour angle, elevation, zenith, rad, rad scaled, joules
-T_array = np.zeros([4,ny+1], dtype=float)
+T_array = np.zeros([6,ny+1], dtype=float)
 
 
 # Prints of shapes and numbers (all are numbers and none are shapes)
-print('r_number:', r)
+print('r_number (should be less than 0.5):', r)
 if r > 0.5:
     print('The r_number is too high, should be < 0.5. Try adjusting dt or dx')
 print('a_number:', a)
@@ -369,6 +397,10 @@ if spin_up == 1:
     spin_up_has_occurred = 1    
     ic = sp_temp[:, -1]
     temp[:,0] = ic
+    # Indexes the last 24h of the spin up surface temp
+    index = int((86400/dt)*((sp_runtime/24)-1))
+    sp_temp_mean = np.mean(sp_temp[0,index:-1])
+    print('Diurnal mean surface temperature', sp_temp_mean) 
     print('Spin-up complete')
     
     
@@ -377,8 +409,8 @@ if spin_up == 1:
 # Temperature
 
 if scenario == 4:
-    linscale = rad_data[0]/ic[0]
-    #linscale = -7/ic[0]
+    #linscale = rad_data[0]/ic[0]
+    linscale = tinytag_A[0]/ic[20]
     temp[0,:] = rad_data      # Surface BC
     temp[:,0] = ic * linscale # Scale IC
     temp[:,0] = temp[:,0] * ic_scaling
@@ -390,15 +422,20 @@ elif scenario == 3:
 
 for iy in np.arange(1, ny+1, dtype=int):       
     for ix in np.arange(1 if bc_type == 0 else 0, nx, dtype=int):
-        sw_in = Solar_rad(hour_angle[iy], iy)
-        if ix == 0 and scenario == 3:
-            #Surface temp. calc.
-            ghost_cell[iy-1] = Heat_flux_surface(y[iy], ix, iy, temp, sw_in)
-            temp[ix, iy] = Heat_flow(ix, iy, temp, bc_type, ghost_cell) + latent[ix, iy-1] 
-        else:
-            # Snowpack temp. calc.
-            temp[ix, iy] = Heat_flow(ix, iy, temp, bc_type, ghost_cell) + Solar_extinction(x[ix],sw_in) + latent[ix, iy-1]           
-            
+        
+        if scenario == 3:
+            sw_in = Solar_rad(hour_angle[iy], iy)
+            if ix == 0:
+                #Surface temp. calc.
+                ghost_cell[iy-1] = Heat_flux_surface(y[iy], ix, iy, temp, sw_in)
+                temp[ix, iy] = Heat_flow(ix, iy, temp, bc_type, ghost_cell) + latent[ix, iy-1] 
+            else:
+                # Snowpack temp. calc.
+                temp[ix, iy] = Heat_flow(ix, iy, temp, bc_type, ghost_cell) + Solar_extinction(x[ix],sw_in) + latent[ix, iy-1]  
+                
+        elif scenario == 4:
+            temp[ix, iy] = Heat_flow(ix, iy, temp, bc_type, ghost_cell) + Solar_extinction(x[ix],SW_scaled[iy]) + latent[ix, iy-1]
+              
         latent[ix, iy] = Latent_heat(temp[ix, iy])
         if temp[ix, iy] > 0:
             temp[ix, iy] = 0
@@ -426,27 +463,41 @@ net_growth = np.sum(fg, axis = 1)
 
 
 ############################    Data output   ############################ 
+
+# Sensible heat calculation
+if scenario == 3:
+    sensible_heat = T_array[4,:]
+    LW_out = T_array[5,:]
+elif scenario == 4:
+    sw_srf = SW_net*(1 - mt.exp(-sw_k*dx))
+    sensible_heat = (((T_array[2,:]-T_array[0,:])/dx)*k) - sw_srf - LW_net
+    
+    LW_out = LW_net #FIX this should be changed
+
 if data_to_file == 1:
     output_file = os.path.join(current_dir, 'SC3_data_output.xlsx')
-    data_titles = ["Time", "Surf_T", "T1", "T2","Hour Angle", "Elevation", 
+    data_titles = ["Time", "Surf_T", "T1", "T2", "Sensible heat", 
+                   "LW out", "Hour Angle", "Elevation", 
                    "Zenith", "Radiation", "Rad_scaled", "Rad_en_joules", "A-term sw"]
     data = {
         data_titles[0]: y_t,
         data_titles[1]: T_array[3,:],
         data_titles[2]: T_array[0,:],
         data_titles[3]: T_array[1,:],
-        data_titles[4]: solar_array[0,:],
-        data_titles[5]: solar_array[1,:],
-        data_titles[6]: solar_array[2,:],
-        data_titles[7]: solar_array[3,:],
-        data_titles[8]: solar_array[4,:],
-        data_titles[9]: solar_array[5,:],
+        data_titles[4]: T_array[4,:],
+        data_titles[5]: T_array[5,:],
+        data_titles[6]: solar_array[0,:],
+        data_titles[7]: solar_array[1,:],
+        data_titles[8]: solar_array[2,:],
+        data_titles[9]: solar_array[3,:],
+        data_titles[10]: solar_array[4,:],
+        data_titles[11]: solar_array[5,:],
         }
     df = pd.DataFrame(data)
     df.to_excel(output_file, index=False)
     print("Wrote to file:", output_file)
     
-if ic_to_file == 1:
+if ic_to_file == 1 and spin_up_has_occurred == 1:
     #Write end-state to file for IC
     output_file2 = os.path.join(current_dir, 'IC_data.xlsx')
     data_titles2 = [f"Spin-up temp after {sp_y[-1]} hours"]
@@ -456,7 +507,9 @@ if ic_to_file == 1:
     df = pd.DataFrame(data2)
     df.to_excel(output_file2, index=False)
     print("Wrote to file:", output_file2)
+ 
     
+ 
 # Net growth to df
 if run_number == 1:
     ng_data1 = {ng_title: net_growth,}
@@ -469,6 +522,8 @@ else:
 # Join the DataFrames by columns
 
 
+temp_mean = np.mean(temp[0,2881:-1])
+print('Diurnal mean surface temperature', temp_mean)
 
 end_time = time.time()
 print(f"Simulation complete. Runtime: {(end_time-start_time):.2f} seconds")
@@ -480,65 +535,6 @@ xticks = np.arange(0,-20,-2) #FIX change x-scale by MAX-MIN insted of fixed valu
 pld = int(plot_depth/dx)
 
 
-# for p in np.arange(0, ny+1, h*pisp): #plots all 3 days
-for p in np.arange(h*24, h*48, h*pisp): # Plots day 2. FIX, make better
-    plt.plot(temp[:pld,p], x[:pld], label= f"{y_t[p]}") # Plot every whole hour
-
- 
-plt.gca().invert_yaxis()
-plt.title('Scenario 3: Temperature')
-plt.xlabel('Temperature C')
-plt.ylabel('Depth [cm]')
-plt.legend(fontsize=8)
-plt.grid(alpha=0.5)
-plt.xticks(xticks)
-plt.show()
-
-
-for p in np.arange(0, ny+1, h*pisp):
-    plt.plot(vp[:pld,p], x[:pld], label= f"Time {y_t[p]}") # Plot every whole hour
-
-plt.gca().invert_yaxis()
-plt.title('Vapor pressure')
-plt.xlabel('vp [mb] ')
-plt.ylabel('Depth [cm]')
-plt.legend()
-plt.grid(alpha=0.5)
-plt.show()
-
-
-for p in np.arange(0, ny+1, h*pisp):
-    plt.plot(vpg[:pld,p], x[:pld], label= f"{y_t[p]}") # Plot every whole hour
-    
-plt.gca().invert_yaxis()
-plt.title('Vapor pressure gradient')
-plt.xlabel('vpg [mb/m] ')
-plt.ylabel('Depth [cm]')
-plt.legend()
-plt.grid(alpha=0.5)
-plt.show()
-
-
-for p in np.arange(0, ny+1, h*pisp):
-    plt.plot(fgr[:pld,p], x[:pld], label= f"{y_t[p]}") # Plot every whole hour
-    
-plt.gca().invert_yaxis()
-plt.title('Facet growth rate')
-plt.xlabel('Facet growth rate [nm/s] ')
-plt.ylabel('Depth [cm]')
-plt.legend()
-plt.grid(alpha=0.5)
-plt.show()
-
-
-plt.plot(net_growth[:pld], x[:pld])
-plt.gca().invert_yaxis()
-plt.title('Scenario 3: Net facet growth')
-plt.xlabel('Net growth [mm] ')
-plt.ylabel('Depth [cm]')
-#plt.legend()
-plt.grid(alpha=0.5)
-plt.show()
 
 
 ### Plot-Block: Can be run independently from model routine in Spoider  
@@ -555,27 +551,31 @@ plt.grid(alpha=0.5)
 plt.show()
 
 #%%
-
-#Solar plot
-plt.plot(y,  solar_array[4,:], label= "Calc SW net") # Plot every whole hour    
-plt.plot(y, SW_net, label= "Measured SW net") # Plot every whole hour  
-plt.title('Shortwave rad')
-plt.xlabel('Temperature [°C] ')
-plt.ylabel('Depth [cm]')
-plt.legend()
-plt.grid(alpha=0.5)
-plt.show()
-
-# fig, ax1 = plt.subplots(figsize=(9, 6))
-# ax1.plot(y_hours, rad_data, color='tab:red', label="Rad. temp srf")
-# ax1.set_xlabel("Time")
-# ax1.set_ylabel("Temperature [°C]", color='tab:red')
-# ax1.tick_params(axis='y', labelcolor='tab:red')  # Color of the y-axis labels
-
-# ax2 = ax1.twinx()  # This shares the same x-axis but will have its own y-axis
-# ax2.plot(y_hours, SW_net, color='tab:blue', label="SW net")
-# ax2.set_ylabel("W/m2", color='tab:blue')
-# ax2.tick_params(axis='y', labelcolor='tab:blue')  # Color of the second y-axis labels
+if scenario == 3:
+    #Solar plot
+    plt.plot(y,  solar_array[4,:], label= "Calc SW net") # Plot every whole hour    
+    #plt.plot(y, SW_net, label= "Measured SW net") # Plot every whole hour 
+    plt.plot(y, LW_out, label= "Calc LW out") # Plot every whole hour 
+    plt.plot(y, sensible_heat, label= "Calc sensible heat") # Plot every whole hour
+    plt.title('Shortwave rad')
+    plt.xlabel('sec')
+    plt.ylabel('W/m2')
+    plt.legend()
+    plt.grid(alpha=0.5)
+    plt.show()
+else:
+    #Solar plot
+    plt.plot(y,  solar_array[4,:], label= "Calc SW net") # Plot every whole hour    
+    plt.plot(y, SW_net, label= "Measured SW net") # Plot every whole hour 
+    plt.plot(y, SW_scaled, label= "Scaled SW net") # Plot every whole hour
+    plt.plot(y, LW_net, label= "Calc LW out") # Plot every whole hour 
+    plt.plot(y, sensible_heat, label= "Calc sensible heat") # Plot every whole hour
+    plt.title('Shortwave rad')
+    plt.xlabel('sec')
+    plt.ylabel('W/m2')
+    plt.legend()
+    plt.grid(alpha=0.5)
+    plt.show()
 
 
 #%%
@@ -584,22 +584,13 @@ plt.figure(figsize=(10, 6))
 plt.plot(y, temp[20,:], label= "Snow 10cm") # Plot every whole hour  
 plt.plot(y, tinytag_A, label= "Tinytag A -10cm") # Plot every whole hour  
 plt.plot(y,rad_data, label= "Radiometer surface temp") # Plot every whole hour  
-plt.title(f'Tinytag vs snow temp. SW k={sw_k}')
+plt.title(f'Tinytag vs snow temp. SW k={sw_k}, con 0.14 & No latent, warmer IC')
 plt.xlabel('Seconds')
 plt.ylabel('Temperature [°C]')
 plt.legend()
 plt.grid(alpha=0.5)
 plt.show()
-#%%
-plt.plot(sp_temp[:,-1], x, label="Spin up end t.") # Plot every whole hour   
-plt.plot(temp[:,0], x, label= "IC") # Plot every whole hour    
-plt.gca().invert_yaxis()
-plt.title('Spin-up end state used for IC')
-plt.xlabel('Temperature [°C] ')
-plt.ylabel('Depth [cm]')
-plt.legend()
-plt.grid(alpha=0.5)
-plt.show()
+
 
 #%%
 # Slide show mania
@@ -807,9 +798,9 @@ ax[0].xaxis.set_label_position('top')
 ax[0].xaxis.tick_top()
 
 #Net growth near surface
-ax[1].plot(ng_hub['IC'][:pld], x[:pld], label='IC org.')
-ax[1].plot(ng_hub['IC -30%'][:pld], x[:pld], label='IC -30%')
-ax[1].plot(ng_hub['IC +30%'][:pld], x[:pld], label='IC +30%')
+ax[1].plot(ng_hub['IC'][:pld], x[:pld], label='con 1.4.')
+# ax[1].plot(ng_hub['IC -30%'][:pld], x[:pld], label='IC -30%')
+# ax[1].plot(ng_hub['IC +30%'][:pld], x[:pld], label='IC +30%')
 ax[1].legend(fontsize=11)
 ax[1].set_xlabel("Net 'Facetedness' [mm]")
 ax[1].set_ylabel('Depth [cm]')
