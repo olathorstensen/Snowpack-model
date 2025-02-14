@@ -399,16 +399,16 @@ plt.rcParams.update({'font.size': 22})
 fig, ax = plt.subplots(1, 2, figsize=(12, 6), gridspec_kw={'width_ratios': [2, 1], 'wspace': 0.2})
 
 # Facet growth rate
-ax[0].plot(y, fgr[0, :], label='Upper 2mm', lw=2.5)
-ax[0].plot(y, fgr[-1, :], label='Lower 2mm', lw=2.5)
+ax[0].plot(y, fgr[0, :], label='Uppermost 2 mm', lw=2.5)
+ax[0].plot(y, fgr[-1, :], label='Lowermost 2 mm', lw=2.5)
 ax[0].set_xlabel('Time [h]')#, fontsize = 14)
 ax[0].set_ylabel('Facet growth rate [nm/s]')#, fontsize = 14)
 ax[0].legend()#fontsize=13)
 ax[0].grid(alpha=0.5)
 ax[0].set_xticks(np.arange(0, 25, 6))
-#ax[0].xaxis.set_label_position('top')
+#ax[0].xaxis.set_label_position('top')'
 #ax[0].xaxis.tick_top()
-ax[0].text(0.017, 0.98, "a)", 
+ax[0].text(0.017, 0.98, "a", 
            #fontsize=15, 
            # fontweight='bold', 
            transform=ax[0].transAxes,  # Use axis-relative coordinates
@@ -426,7 +426,7 @@ ax[1].set_xticks([-0.004, 0, 0.004])
 ax[1].set_yticks(np.arange(0,2.5, 0.5))
 #ax[1].xaxis.set_label_position('top')
 #ax[1].xaxis.tick_top()
-ax[1].text(0.035, 0.98, "b)", 
+ax[1].text(0.035, 0.98, "b", 
            #fontsize=15, 
             # fontweight='bold', 
            transform=ax[1].transAxes,  # Use axis-relative coordinates
