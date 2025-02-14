@@ -5,19 +5,14 @@
 #   - Fig update SC 3
 
 
-
-
-
 # Comment: 
 #   - TODO Change color for temp plot,
 #   - Instenses to looked at marked with "FIX"
-#   - ic_to file can not be 1 if spin_up is 0
-#   - Need to plot the x axis 0.5dx off for vpg, fgr, fg and net_growth
-#   - Need staggered grid in y direction for net_growth
-#   - Switching scenario 4 data files to csv for increased read speed
 
 
 
+#FIX Solar curve peak at 13:36
+# Scale theoretical solar input
 import numpy as np
 import math as mt
 import pandas as pd
@@ -30,20 +25,20 @@ import time
 start_time = time.time()
 
 ############################    Parameters   ############################ 
-runtime = 24*1            # Hours (int)
+runtime = 24*2            # Hours (int)
 dt = 30                   # Time step [seconds] (Must be a divisor of 3600) For Sc. 4 use 30s or 60s
 dx = 0.005                # Dist. interval [m]
 depth = 1                 # Snow depth from surface [m]
 b_bc = 0                  # Bottom boundary condition, fixed [°C]
 pisp = 2                  # Plot interval spacer [hours] (int)
-plot_depth = 0.35         # Depth shown in plots measured from surface [m]
+plot_depth = 0.40         # Depth shown in plots measured from surface [m]
 
-spin_up = 0              # [0] No spin-up, [1] Run spin-up
-sp_runtime = 24*14        # Spin-up run time [Hours]
+spin_up = 0               # [0] No spin-up, [1] Run spin-up
+sp_runtime = 24*28        # Spin-up run time [Hours]
 sp_pisp = 24              # Spin-up Plot interval spacer [hours] (int)
 
 load_ic = 1               # Load IC from file [0] No, [1] Yes
-ic_to_file = 0            # Writes model IC to file. If spin-up[1] -> IC given by end of spin-up temp. [0] No, [1] Yes
+ic_to_file = 1            # Writes model IC to file. If spin-up[1] -> IC given by end of spin-up temp. [0] No, [1] Yes
 data_to_file = 0          # Write radiation and atm temp data to new file (spin-up excluded) [0] No, [1] Yes
 
 bc_type = 0               # [0] Dirichlet (fixed), [1] Neumann (ghost cell)
@@ -51,14 +46,14 @@ scenario = 3              # Choose scenario [3],[4] Not fully working yet...
 cold_T = 1                # For SC3, use [0] for org T temp, use [1] for 700m incresed elevation
 window_size = 30          # Rolling window for radiometer data noice reduction
 
-ng_title = 'IC +30%'           # Title for Net_growth dataframe
+ng_title = 'Warmer IC'           # Title for Net_growth dataframe
 run_number = 2            # Must conduct one inital run with [1]
-ic_scaling = 1           # Scales IC e.g. 0.7 = -30% scaling
+ic_scaling = 1          # Scales IC 0.7 -30% scaling, 1.3 +30% scaling
 
 ############################    Constants   ############################ 
 
     # Snow properties  
-k = 0.1439              # Thermal conductivity snow [W/m K]    0.1439
+k = 0.1439275              # Thermal conductivity snow [W/m K]    0.1439
 rho = 245                # density [kg/m3] #277
 cp = 2090                # Specific heat capacity of ice [J/kg °C]
 T0 = 273.15              # Ice-point temperature [K]
@@ -79,7 +74,7 @@ sw_k = 50                # Solar extinction coefficient (k)
 sigma = 5.67*10**-8      # Stefan-Boltzmann constant
 emis = 1                 # Snow emissivity 
 C = 0                    # Coefficient 
-A = k/dx/4.15             # A-variable #3.8  #6.655 org SC3
+A = (k/dx)/4.14         # A-variable #3.8  #6.655 org SC3 4.14
 B = sigma * emis         # B-variable
 T1_amp = 6               # T1 amplitude [°C]  #6
 T1_avg = -4              # T1 average temp. [°C]
@@ -216,7 +211,7 @@ def Heat_flux_surface(t, ix, iy, grid, sw_in) :
     else:
         lr = (0.0065)*700 # laps rate -6.5 deg/1000m, up 'x' m
         T1 = -T1_amp * mt.cos( (2*mt.pi/(24*60*60)) * (t-T1_phase)) + (T1_avg-lr) # Temp air colder, 
-        T2 = -T2_amp * mt.cos( (2*mt.pi/(24*60*60)) * (t-T2_phase)) + (T2_avg-(lr*0.36)) # Temp atm colder, 36% reduction in laps rate
+        T2 = -T2_amp * mt.cos( (2*mt.pi/(24*60*60)) * (t-T2_phase)) + (T2_avg-lr) #0.36)) # Temp atm colder, 36% reduction in laps rate
     
     Q_sensible = C + A*(T1-T)
     Q_LWout = -B * ((T + T0)**4 - (T2 + T0)**4) 
@@ -362,6 +357,7 @@ print('h_number:', h)
 print('x', x.shape)
 print('y', y.shape)
 print('snowpack grid shape', temp.shape)
+print('Scenario:', scenario)
 
 
 
@@ -437,6 +433,7 @@ for iy in np.arange(1, ny+1, dtype=int):
                 temp[ix, iy] = Heat_flow(ix, iy, temp, bc_type, ghost_cell) + Solar_extinction(x[ix],sw_in) + latent[ix, iy-1]  
                 
         elif scenario == 4:
+            Solar_rad(hour_angle[iy], iy)
             temp[ix, iy] = Heat_flow(ix, iy, temp, bc_type, ghost_cell) + Solar_extinction(x[ix],SW_scaled[iy]) + latent[ix, iy-1]
               
         latent[ix, iy] = Latent_heat(temp[ix, iy])
@@ -460,20 +457,26 @@ for iy in np.arange(0, ny, dtype=int):
     for ix in np.arange(0, nx, dtype=int):
         fg[ix, iy] = Facet_growth(ix, iy)
 
-net_growth = np.sum(fg, axis = 1)
+if scenario == 4:
+    net_growth = np.sum(fg[:,h*24:h*48], axis = 1)
+else:
+    #net_growth = np.sum(fg, axis = 1)
+    net_growth = np.sum(fg[:,0:h*24], axis = 1)
 
 
 
 
 ############################    Data output   ############################ 
-
 # Sensible heat calculation
 if scenario == 3:
-    sensible_heat = T_array[4,:]
-    LW_out = T_array[5,:]
+    SC3_sensible_heat = T_array[4,:]
+    SC3_LW_out = T_array[5,:]
+    SC3_srf_temp = temp[0,:]
+    SC3_10cm_temp = temp[20,:]
+    SC3_net_growth = net_growth
 elif scenario == 4:
     sw_srf = SW_net*(1 - mt.exp(-sw_k*dx))
-    sensible_heat = (((T_array[2,:]-T_array[0,:])/dx)*k) - sw_srf - LW_net
+    sensible_heat = (((temp[0,:]-temp[1,:])/dx)*k) - sw_srf - LW_net
     
     LW_out = LW_net #FIX this should be changed
 
@@ -512,23 +515,35 @@ if ic_to_file == 1 and spin_up_has_occurred == 1:
     print("Wrote to file:", output_file2)
  
     
- 
-# Net growth to df
-if run_number == 1:
-    ng_data1 = {ng_title: net_growth,}
-    ng_df1 = pd.DataFrame(ng_data1)
-    ng_hub = pd.concat([df_ng, ng_df1], axis=1)
+#TODO
+#TODO
 
-else:    
-    ng_data2 = {ng_title: net_growth}
-    ng_df2 = pd.DataFrame(ng_data2)
-    ng_hub = pd.concat([ng_hub, ng_df2], axis=1)
-print('ng_hub', ng_hub.columns)
-# Join the DataFrames by columns
+# output_file2 = os.path.join(current_dir, 'ng_hub_SC3.xlsx')
+# ng_hub.to_excel(output_file2, index=False)
+
+# # Net growth to df
+# if run_number == 1 and scenario == 3:
+#     ng_data1 = {ng_title: net_growth,}
+#     ng_df1 = pd.DataFrame(ng_data1)
+#     ng_hub = pd.concat([df_ng, ng_df1], axis=1)
+# elif run_number == 1 and scenario == 4:
+#     ng_data1 = {ng_title: net_growth,}
+#     ng_df1 = pd.DataFrame(ng_data1)
+#     ng_data0 = {'SC 3': SC3_net_growth}
+#     df_3 = pd.DataFrame(ng_data0)
+#     ng_hub = pd.concat([df_3, ng_df1], axis=1)
+    
+# else:    
+#     ng_data2 = {ng_title: net_growth}
+#     ng_df2 = pd.DataFrame(ng_data2)
+#     ng_hub = pd.concat([ng_hub, ng_df2], axis=1)
+# print('ng_hub', ng_hub.columns)
 
 
-#temp_mean = np.mean(temp[0,2881:-1])
-#print('Diurnal mean surface temperature', temp_mean)
+
+temp_mean = np.mean(temp[0,:])
+temp_mean = np.mean(temp[0,2880:-1])
+print('Diurnal mean surface temperature', temp_mean)
 
 end_time = time.time()
 print(f"Simulation complete. Runtime: {(end_time-start_time):.2f} seconds")
@@ -536,7 +551,7 @@ print(f"Simulation complete. Runtime: {(end_time-start_time):.2f} seconds")
 
 #%%
 ##########################     Plots    ########################## 
-xticks = np.arange(0,-20,-2) #FIX change x-scale by MAX-MIN insted of fixed values
+xticks = np.arange(0,-20,-2) 
 pld = int(plot_depth/dx)
 
 
@@ -544,40 +559,33 @@ pld = int(plot_depth/dx)
 
 ### Plot-Block: Can be run independently from model routine in Spoider  
 #%%
-#Surface temp
-plt.figure(figsize=(9, 6))
-plt.plot(y,rad_data, label= "Measured") # Plot every whole hour  
-plt.plot(y, sp_temp[0,11520:], label= "Spin-up final 3-days") # Plot every whole hour   
-plt.title('Surface temp')
-plt.xlabel('Temperature [°C] ')
-plt.ylabel('Depth [cm]')
-plt.legend()
-plt.grid(alpha=0.5)
-plt.show()
-
-#%%
+yticks = np.arange(120,-140,-20)
 if scenario == 3:
     #Solar plot
-    plt.plot(y,  solar_array[4,:], label= "Calc SW net") # Plot every whole hour    
+    plt.plot(y,  solar_array[4,:], label= "Calc SW net", linestyle='--' ) # Plot every whole hour 
     #plt.plot(y, SW_net, label= "Measured SW net") # Plot every whole hour 
     plt.plot(y, LW_out, label= "Calc LW out") # Plot every whole hour 
     plt.plot(y, sensible_heat, label= "Calc sensible heat") # Plot every whole hour
     plt.title('Shortwave rad')
     plt.xlabel('sec')
     plt.ylabel('W/m2')
+    plt.yticks(yticks)
     plt.legend()
     plt.grid(alpha=0.5)
     plt.show()
 else:
     #Solar plot
-    plt.plot(y,  solar_array[4,:], label= "Calc SW net") # Plot every whole hour    
-    plt.plot(y, SW_net, label= "Measured SW net") # Plot every whole hour 
+    plt.plot(y, solar_array[4,:], label= "Calc SW net", linestyle='--', color='blue' ) # Plot every whole hour    
+    plt.plot(y, SW_net, label= "Measured SW net", linestyle='-', color='blue' ) # Plot every whole hour 
     plt.plot(y, SW_scaled, label= "Scaled SW net") # Plot every whole hour
-    plt.plot(y, LW_net, label= "Calc LW out") # Plot every whole hour 
-    plt.plot(y, sensible_heat, label= "Calc sensible heat") # Plot every whole hour
-    plt.title('Shortwave rad')
+    plt.plot(y, LW_net, label= "Net LW", linestyle='-', color='green' ) # Plot every whole hour 
+    plt.plot(y, SC3_LW_out, label= "Steady state LW out", linestyle='--', color='green' ) # Plot every whole hour 
+    plt.plot(y, sensible_heat, label= "Calc sensible heat", linestyle='-', color='orange') 
+    plt.plot(y, SC3_sensible_heat, label= "Steady state sensible h.", linestyle='--', color='orange') 
+    plt.title('Fluxes') 
     plt.xlabel('sec')
     plt.ylabel('W/m2')
+    plt.yticks(yticks)
     plt.legend()
     plt.grid(alpha=0.5)
     plt.show()
@@ -586,10 +594,11 @@ else:
 #%%
 #Temperature
 plt.figure(figsize=(10, 6))
-plt.plot(y, temp[20,:], label= "Snow 10cm") # Plot every whole hour  
-plt.plot(y, tinytag_A, label= "Tinytag A -10cm") # Plot every whole hour  
-plt.plot(y,rad_data, label= "Radiometer surface temp") # Plot every whole hour  
-plt.title(f'Tinytag vs snow temp. SW k={sw_k}, con 0.14 & No latent, warmer IC')
+plt.plot(y, temp[20,:], label= "Snow 10cm simulated", color='blue') 
+#plt.plot(y, temp[18,:], label= "Snow 10cm simulated", color='orange') # Plot every whole hour
+plt.plot(y, tinytag_A, label= "Tinytag at 10cm", color ='red') # Plot every whole hour  
+plt.plot(y,rad_data, label="Surface temperature smoothed", linestyle='-', color='green') # Plot every whole hour  
+plt.title(f'Tinytag vs snow temp. SW k={sw_k}, wih latent heat and scaled SW')
 plt.xlabel('Seconds')
 plt.ylabel('Temperature [°C]')
 plt.legend()
@@ -600,7 +609,7 @@ plt.show()
 #%%
 # Slide show mania
 
-xticks = np.arange(0,-22,-2) #FIX change x-scale by MAX-MIN insted of fixed values
+xticks = np.arange(0,-22,-2) 
 pld = int(plot_depth/dx)
 
 
@@ -678,7 +687,7 @@ plt.show()
 
 
 #%%
-xticks = np.arange(0,-20,-2) #FIX change x-scale by MAX-MIN insted of fixed values
+xticks = np.arange(0,-20,-2) 
 pld = int(plot_depth/dx)
 
 fig, ax = plt.subplots(3, 3, figsize=(24, 12))
@@ -783,9 +792,10 @@ plt.show()
 #%%
 
 # PAPER FIGURE SC3
-xticks = np.arange(0,-20,-2) #FIX change x-scale by MAX-MIN insted of fixed values
-pld = int(plot_depth/dx)
-fig, ax = plt.subplots(1, 2, figsize = (12, 6), gridspec_kw={'width_ratios': [2, 1]})
+xticks = np.arange(0,-22,-2)
+pld = int(plot_depth/dx)+1
+#fig, ax = plt.subplots(1, 2, figsize = (12, 6), gridspec_kw={'width_ratios': [2, 1]})
+fig, ax = plt.subplots(1, 2, figsize=(12, 6), gridspec_kw={'width_ratios': [2, 1], 'wspace': 0.1})
 #Temperature plot
 cmap = plt.get_cmap("tab20")  # Alternatives: "viridis", "plasma", "tab10", "tab20", "Set3"
 colors = [cmap(i / len(np.arange(0, h*24, h*pisp))) for i in range(len(np.arange(0, h*24, h*pisp)))]
@@ -793,43 +803,66 @@ colors = [cmap(i / len(np.arange(0, h*24, h*pisp))) for i in range(len(np.arange
 
 for i, p in enumerate(np.arange(0, h*24, h*pisp)):
     time_only = (base_time + timedelta(seconds=y_sec[p])).strftime("%H:%M")
-    ax[0].plot(temp[:pld, p], x[:pld], label=time_only, color=colors[i])
+    ax[0].plot(temp[:pld, p], x[:pld], label=time_only, color=colors[i], lw=2.7)
 
 ax[0].set_xlabel('Temperature [°C]')
-ax[0].set_ylabel('Depth [cm]')
+#ax[0].set_ylabel('Depth [cm]')
+ax[0].yaxis.tick_right()  # Move y-tick labels to the right
+ax[0].yaxis.set_label_position("right")  # Move y-axis label to the right
+ax[0].set_ylabel('Depth [cm]', rotation=270, labelpad=25)
 ax[0].invert_yaxis()
-ax[0].legend(fontsize=11)
+ax[0].legend()#fontsize=11)
 ax[0].grid(alpha=0.5)
 ax[0].set_xticks(xticks)
 ax[0].xaxis.set_label_position('top')
 ax[0].xaxis.tick_top()
+ax[0].text(0.96, 0.05, "a", 
+           #fontsize=15, 
+           #fontweight='bold', 
+           transform=ax[0].transAxes,
+           verticalalignment='top', 
+           horizontalalignment='left', 
+           bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
 
 #Net growth near surface
-colors = ['black', 'black', 'green', 'blue', 'red' ]
+
+pld = int(plot_depth/dx)
+linestyle = ['dotted', '-', '--', '-.', '-', '-' ]
+colors = ['C3', 'black', 'darkgrey', 'darkgrey', 'C9', 'lightsalmon' ]
+linewith = [4,4.2,2.7 ,2.7 ,2.7 ,2.7 ,2.7]
 for i, column in enumerate(ng_hub.columns):
-    linestyle = ':' if i == 0 else '--' if i > 2 else '-'  # First column dotted, others solid
-    ax[1].plot(ng_hub[column][:pld], x[:pld], label=column, linestyle=linestyle, color=colors[i])
-    
-ax[1].legend(fontsize=11)
-ax[1].set_xlabel("Net 'Facetedness' [mm]")
-ax[1].set_ylabel('Depth [cm]')
+    #linestyle = ':' if i == 0 else '--' if i > 2 else '-'  # First column dotted, others solid
+    ax[1].plot(ng_hub[column][:pld], x[:pld], label=column, linestyle=linestyle[i], color=colors[i], lw=linewith[i])
+  
+ax[1].legend()#fontsize=11)
+ax[1].set_xlabel("Net 'facetedness' [mm]")
+ax[1].set_xticks(np.arange(-0.2, 0.06, 0.05))
+#ax[1].set_ylabel('Depth [cm]')
+ax[1].set_yticklabels([])
 ax[1].invert_yaxis()
 ax[1].grid(alpha=0.5)
 ax[1].xaxis.set_label_position('top')
 ax[1].xaxis.tick_top()
+ax[1].text(0.91, 0.05, "b", 
+           #fontsize=15, 
+           #fontweight='bold', 
+           transform=ax[1].transAxes,
+           verticalalignment='top', 
+           horizontalalignment='left', 
+           bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
 
 #%%
 
-# PAPER FIGURE SC4
-xticks = np.arange(0,-20,-2) #FIX change x-scale by MAX-MIN insted of fixed values
-pld = int(plot_depth/dx)
+# PAPER FIGURE SC4 
+xticks = np.arange(0,-20,-2) 
+pld = int(plot_depth/dx)+1
 fig, ax = plt.subplots(1, 2, figsize = (12, 6), gridspec_kw={'width_ratios': [2, 1]})
 #Temperature plot
 cmap = plt.get_cmap("tab20")  # Alternatives: "viridis", "plasma", "tab10", "tab20", "Set3"
 colors = [cmap(i/ len(np.arange(h*24, h*48, h*pisp))) for i in range(len(np.arange(h*24, h*48, h*pisp)))] 
 
 
-for i, p in enumerate (np.arange(h*24, h*48, h*pisp)): # Plots day 2. FIX, make better
+for i, p in enumerate (np.arange(h*24, h*48, h*pisp)): # Plots day 2
     time_only = (base_time + timedelta(seconds=y_sec[p])).strftime("%H:%M")
     ax[0].plot(temp[:pld, p], x[:pld], label=time_only, color=colors[i])
 
@@ -841,15 +874,36 @@ ax[0].grid(alpha=0.5)
 ax[0].set_xticks(xticks)
 ax[0].xaxis.set_label_position('top')
 ax[0].xaxis.tick_top()
+ax[0].text(0.95, 0.05, "a", 
+           #fontsize=15, 
+           #fontweight='bold', 
+           transform=ax[0].transAxes,
+           verticalalignment='top', 
+           horizontalalignment='left', 
+           bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
+
 
 #Net growth near surface
-ax[1].plot(ng_hub['IC'][:pld], x[:pld], label='con 1.4.')
-# ax[1].plot(ng_hub['IC -30%'][:pld], x[:pld], label='IC -30%')
-# ax[1].plot(ng_hub['IC +30%'][:pld], x[:pld], label='IC +30%')
+pld = int(plot_depth/dx)
+colors = ['black', 'black', 'green', 'blue', 'red' ]
+linestyle = ['dotted', '-', '--', '-', '-', ]
+for i, column in enumerate(ng_hub.columns):
+
+    ax[1].plot(ng_hub[column][:pld], x[:pld], label=column, linestyle=linestyle[i], color=colors[i])
+    
 ax[1].legend(fontsize=11)
-ax[1].set_xlabel("Net 'Facetedness' [mm]")
+ax[1].set_xlabel("Net 'facetedness' [mm]")
 ax[1].set_ylabel('Depth [cm]')
 ax[1].invert_yaxis()
 ax[1].grid(alpha=0.5)
 ax[1].xaxis.set_label_position('top')
 ax[1].xaxis.tick_top()
+ax[1].text(0.9, 0.05, "b", 
+           #fontsize=15, 
+           #fontweight='bold', 
+           transform=ax[1].transAxes,
+           verticalalignment='top', 
+           horizontalalignment='left', 
+           bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
+
+
