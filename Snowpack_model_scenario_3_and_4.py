@@ -9,7 +9,7 @@
 #   - TODO Change color for temp plot,
 #   - Instenses to looked at marked with "FIX"
 
-
+#Storagee of latent heat
 
 #FIX Solar curve peak at 13:36
 # Scale theoretical solar input
@@ -33,8 +33,8 @@ b_bc = 0                  # Bottom boundary condition, fixed [°C]
 pisp = 2                  # Plot interval spacer [hours] (int)
 plot_depth = 0.40         # Depth shown in plots measured from surface [m]
 
-spin_up = 0              # [0] No spin-up, [1] Run spin-up
-sp_runtime = 24*21        # Spin-up run time [Hours]
+spin_up = 0             # [0] No spin-up, [1] Run spin-up
+sp_runtime = 24*14        # Spin-up run time [Hours]
 sp_pisp = 24              # Spin-up Plot interval spacer [hours] (int)
 
 load_ic = 1               # Load IC from file [0] No, [1] Yes
@@ -42,14 +42,15 @@ ic_to_file = 1            # Writes model IC to file. If spin-up[1] -> IC given b
 data_to_file = 0          # Write radiation and atm temp data to new file (spin-up excluded) [0] No, [1] Yes
 
 bc_type = 0               # [0] Dirichlet (fixed), [1] Neumann (ghost cell)
-scenario = 4 
+scenario = 4
 skew_sw = 1              # For sc 3
 cold_T = 0                # For SC3, use [0] for org T temp, use [1] for 700m incresed elevation
 window_size = 30          # Rolling window for radiometer data noice reduction
 
-ng_title = 'Warmer IC'           # Title for Net_growth dataframe
+ng_title = 'k=50'           # Title for Net_growth dataframe
 run_number = 2            # Must conduct one inital run with [1]
 ic_scaling = 1          # Scales IC 0.7 -30% scaling, 1.3 +30% scaling
+ng_switch = 0
 
 ############################    Constants   ############################ 
 
@@ -86,91 +87,107 @@ T2_avg = -31             # T2 average temp. [°C]
 T2_phase = 6600          # T2 phase shift [s] 
 
 
-
+# roling window: 1.30 , 2. 100, 3. 100
 ############################    Data import   ############################ 
 current_dir = os.path.dirname(os.path.abspath(__file__))  
-if run_number < 2:
-    if load_ic > 0:
-        #input_file = r'D:\Dokumenter\...\IC_data_output.xlsx' # Use manual file path if current_dir doesnt work
-        input_file = os.path.join(current_dir, 'IC_data.xlsx')
-        print("File loaded:", input_file)
+
+# #sIMON TEMPS
+# input_file = os.path.join(current_dir, 'surface_temp_simon.xlxs')
+# print("File loaded:", input_file)
+# df_simon = pd.read_excel(input_file, header=0)
+
+# SW scaling data - Works only for dt=30s
+input_file = os.path.join(current_dir, 'CR674_scaling.csv')
+print("File loaded:", input_file)
+df_s = pd.read_csv(input_file, header=0)
+SW_scaling = np.array(df_s.iloc[:,0].values, dtype=float)
         
-        df1 = pd.read_excel(input_file, header=0)
-        row = df1.iloc[:,0].values
-        ic = np.array(row, dtype=float)
-        
-        
-    if scenario  == 4:
-        # Radiometer data
-        input_file = os.path.join(current_dir, 'Radiometer_data.xlsx')
-        print("File loaded:", input_file)
-        df_r = pd.read_excel(input_file, header=11)
-        columns = ['Date and time','Net SW', 'Net LW', 'ELWup', 'ELWlow', 'Snow surface temp']
-        df_r = df_r[columns]
-        # Coarse crop and noise reduction
-        start_filter = pd.to_datetime("2022.03.29" + " 00:00:00") 
-        end_filter = pd.to_datetime("2022.04.03" + " 00:00:00")
-        df_r = df_r[df_r["Date and time"].between(start_filter, end_filter)]
-        df_r = df_r.reset_index(drop=True)
-        df_rf = df_r[["Date and time"]].copy() # New dataframe: 'radiometer_filtered'
-        for i in columns[1:]:
-            df_rf[i] = df_r[i].rolling(window=window_size, center=True).max() \
-                              .rolling(window=window_size, center=True).median() \
-                              .rolling(window=window_size, center=True).mean()  
-        # Final crop
-        start_filter = pd.to_datetime("2022.03.30" + " 00:00:00") 
-        end_filter = pd.to_datetime("2022.04.02" + " 00:00:00")
-        df_rf = df_rf[df_rf["Date and time"].between(start_filter, end_filter)] # Selecting 1.april period
-        df_rf = df_rf.reset_index(drop=True)    
-     
-        if dt == 30:
-            freq = "30S" # Interpolates 30 sec interval
-            df_rf.set_index("Date and time", inplace=True)
-            df_rf = df_rf.resample(freq).interpolate(method="linear")
-            df_rf.reset_index(inplace=True) 
-        else:
-            freq = "1T"  # Interpolates 1 min interval  
-        # Convert from pandas to numpy
-        rad_data = np.array(df_rf.iloc[:,5].values, dtype=float)
-        SW_net = np.array(df_rf.iloc[:,1].values, dtype=float)
-        SW_net = np.where(SW_net<0, 0, SW_net) #Removes negative values
-        LW_net = np.array(df_rf.iloc[:,2].values, dtype=float)
-  
+
+if load_ic > 0:
+    #input_file = r'D:\Dokumenter\...\IC_data_output.xlsx' # Use manual file path if current_dir doesnt work
+    input_file = os.path.join(current_dir, 'IC_data.xlsx')
+    print("File loaded:", input_file)
     
-        # Tinytag temperature data
-        input_file = os.path.join(current_dir, 'Tinytag_data.xlsx')
-        print("File loaded:", input_file)
-        df_t = pd.read_excel(input_file, header=0)
-        for i in ['A','B']:
-            tt_date = 'Date_'+str(i)
-            tt_temp = 'Tinytag_'+str(i)
-            df_tf = df_t[[tt_date, tt_temp]] 
-            df_tf.set_index(tt_date, inplace=True)
-            df_tf = df_tf.resample(freq).interpolate(method="linear")
-            df_tf.reset_index(inplace=True)   
-            df_tf = df_tf[df_tf[tt_date].between(start_filter, end_filter)] # Selecting 1.april period
-            if i == 'A':  
-                tinytag_A = np.array(df_tf.iloc[:,1].values, dtype=float)
-            elif i == 'B':
-                tinytag_B = np.array(df_tf.iloc[:,1].values, dtype=float)
-                
-                
-        # SW scaling data - Works only for dt=30s
-        input_file = os.path.join(current_dir, 'CR674_scaling.csv')
-        print("File loaded:", input_file)
-        df_s = pd.read_csv(input_file, header=0)
-        SW_scaling = np.array(df_s.iloc[:,0].values, dtype=float)
-        
-        SW_scaled = SW_net * SW_scaling
-        
+    df1 = pd.read_excel(input_file, header=0)
+    row = df1.iloc[:,0].values
+    ic = np.array(row, dtype=float)
+    
+    
+if scenario  == 4:
+    # Radiometer data
+    input_file = os.path.join(current_dir, 'Radiometer_data.xlsx')
+    print("File loaded:", input_file)
+    df_r = pd.read_excel(input_file, header=11)
+    columns = ['Date and time','Net SW', 'Net LW', 'ELWup', 'ELWlow', 'Snow surface temp']
+    df_r = df_r[columns]
+    # Coarse crop and noise reduction
+    start_filter = pd.to_datetime("2022.03.29" + " 00:00:00") 
+    end_filter = pd.to_datetime("2022.04.03" + " 00:00:00")
+    df_r = df_r[df_r["Date and time"].between(start_filter, end_filter)]
+    df_r = df_r.reset_index(drop=True)
+    df_rf = df_r[["Date and time"]].copy() # New dataframe: 'radiometer_filtered'
+    for i in columns[1:]:
+        df_rf[i] = df_r[i].rolling(window=window_size, center=True).max() \
+                          .rolling(window=window_size, center=True).median() \
+                          .rolling(window=window_size, center=True).mean()  
+    # Final crop
+    start_filter = pd.to_datetime("2022.03.30" + " 00:00:00") 
+    end_filter = pd.to_datetime("2022.04.02" + " 00:00:00")
+    df_rf = df_rf[df_rf["Date and time"].between(start_filter, end_filter)] # Selecting 1.april period
+    df_rf = df_rf.reset_index(drop=True)    
+    #org df
+    df_r = df_r[df_r["Date and time"].between(start_filter, end_filter)] # Selecting 1.april period
+    df_r = df_r.reset_index(drop=True)    
+ 
+ 
+    if dt == 30:
+        freq = "30S" # Interpolates 30 sec interval
+        df_rf.set_index("Date and time", inplace=True)
+        df_rf = df_rf.resample(freq).interpolate(method="linear")
+        df_rf.reset_index(inplace=True) 
+        #org df
+        df_r.set_index("Date and time", inplace=True)
+        df_r = df_r.resample(freq).interpolate(method="linear")
+        df_r.reset_index(inplace=True) 
     else:
-        input_file = os.path.join(current_dir, 'Net_growth_data.xlsx')
-        print("File loaded:", input_file)
-        df_ng = pd.read_excel(input_file, header=0)
-        
-        
+        freq = "1T"  # Interpolates 1 min interval  
+    # Convert from pandas to numpy
+    rad_data = df_rf['Snow surface temp'].values.astype(float)
+    # SW_net = np.array(df_rf.iloc[:,1].values, dtype=float)
+    # SW_net = np.where(SW_net<0, 0, SW_net) #Removes negative values
+    # LW_net = np.array(df_rf.iloc[:,2].values, dtype=float)
+    SW_net = np.array(df_r.iloc[:,1].values, dtype=float)
+    SW_net = np.where(SW_net<0, 0, SW_net) #Removes negative values
+    LW_net = np.array(df_r.iloc[:,2].values, dtype=float)
+  
+
+    # Tinytag temperature data
+    input_file = os.path.join(current_dir, 'Tinytag_data.xlsx')
+    print("File loaded:", input_file)
+    df_t = pd.read_excel(input_file, header=0)
+    for i in ['A','B']:
+        tt_date = 'Date_'+str(i)
+        tt_temp = 'Tinytag_'+str(i)
+        df_tf = df_t[[tt_date, tt_temp]] 
+        df_tf.set_index(tt_date, inplace=True)
+        df_tf = df_tf.resample(freq).interpolate(method="linear")
+        df_tf.reset_index(inplace=True)   
+        df_tf = df_tf[df_tf[tt_date].between(start_filter, end_filter)] # Selecting 1.april period
+        if i == 'A':  
+            tinytag_A = np.array(df_tf.iloc[:,1].values, dtype=float)
+        elif i == 'B':
+            tinytag_B = np.array(df_tf.iloc[:,1].values, dtype=float)
+            
+            
+
+    
+    SW_scaled = SW_net * SW_scaling
+    
 else:
-    print('Variable run_number > 1, Radiometer and Tinytag data not loaded')
+    input_file = os.path.join(current_dir, 'Net_growth_data.xlsx')
+    print("File loaded:", input_file)
+    df_ng = pd.read_excel(input_file, header=0)
+    
     
 
 ###########################    Functions    ###########################
@@ -329,8 +346,8 @@ base_time = datetime.strptime("00:00 30/03/2022", "%H:%M %d/%m/%Y")
 y_t = [(base_time + timedelta(seconds=seconds)).strftime("%H:%M %d/%m/%Y") for seconds in y_sec]
 
 
-    # Initial condition
-# Linear ic
+#    Initial condition
+#Linear ic
 if load_ic == 0:
     ic = np.linspace(-16, 0, nx +1)   
 temp[:, 0] = ic
@@ -376,10 +393,14 @@ if spin_up == 1:
     sp_temp[:,0] = ic
     sp_temp[-1,:] = b_bc * np.ones(sp_ny+1, dtype=float)  # Fixed bottom bc
 
-            
+    if skew_sw == 1:
+        sp_SW_scaling = Diurnal_array_reshape(SW_scaling[0:2881], sp_runtime)
+       
     for iy in np.arange(1, sp_ny+1, dtype=int):       
         for ix in np.arange(0, nx, dtype=int):
             sw_in = Solar_rad(sp_hour_angle[iy], iy)
+            if skew_sw == 1:
+                sw_in = sw_in * sp_SW_scaling[iy]
             if ix == 0:
                 #Surface temp calc
                 sp_ghost_cell[iy-1] = Heat_flux_surface(sp_y[iy], ix, iy, sp_temp, sw_in)
@@ -387,11 +408,16 @@ if spin_up == 1:
                 
             else:
                 # Temp for snowpack
-                sp_temp[ix, iy] = Heat_flow(ix, iy, sp_temp, 1, sp_ghost_cell) + Solar_extinction(x[ix],sw_in) + sp_latent[ix,iy]
+                sp_temp[ix, iy] = Heat_flow(ix, iy, sp_temp, 1, sp_ghost_cell) + Solar_extinction(x[ix],sw_in) + sp_latent[ix,iy-1]
             
             sp_latent[ix,iy] = Latent_heat(sp_temp[ix,iy])
             if sp_temp[ix, iy] > 0:
-                sp_temp[ix, iy] = 0        
+                sp_temp[ix, iy] = 0    
+                
+
+                        
+           
+                
 
     spin_up = 0 
     spin_up_has_occurred = 1    
@@ -409,14 +435,15 @@ if spin_up == 1:
 # Temperature
 
 if scenario == 4:
-    #linscale = rad_data[0]/ic[0]
-    linscale = tinytag_A[0]/ic[20]
+    linscale = rad_data[0]/ic[0]
+    #linscale = tinytag_A[0]/ic[20]
     temp[0,:] = rad_data      # Surface BC
-    temp[:,0] = ic * linscale # Scale IC
+    temp[:,0] =  temp[:,0] * linscale # Scale IC
     #temp[:,0] = temp[:,0] * ic_scaling
     
 elif scenario == 3:
     bc_type = 1
+    #temp = sp_temp[:,]
     temp[:,0] = temp[:,0] * ic_scaling
 
 
@@ -519,7 +546,7 @@ if ic_to_file == 1 and spin_up_has_occurred == 1:
     output_file2 = os.path.join(current_dir, 'IC_data.xlsx')
     data_titles2 = [f"Spin-up temp after {sp_y[-1]} hours"]
     data2 = {
-        data_titles2[0]: temp[:,0],
+        data_titles2[0]: sp_temp[:,-1],
         }
     df = pd.DataFrame(data2)
     df.to_excel(output_file2, index=False)
@@ -532,29 +559,34 @@ if ic_to_file == 1 and spin_up_has_occurred == 1:
 # output_file2 = os.path.join(current_dir, 'ng_hub_SC3.xlsx')
 # ng_hub.to_excel(output_file2, index=False)
 
-# # Net growth to df
-# if run_number == 1 and scenario == 3:
-#     ng_data1 = {ng_title: net_growth,}
-#     ng_df1 = pd.DataFrame(ng_data1)
-#     ng_hub = pd.concat([df_ng, ng_df1], axis=1)
-# elif run_number == 1 and scenario == 4:
-#     ng_data1 = {ng_title: net_growth,}
-#     ng_df1 = pd.DataFrame(ng_data1)
-#     ng_data0 = {'SC 3': SC3_net_growth}
-#     df_3 = pd.DataFrame(ng_data0)
-#     ng_hub = pd.concat([df_3, ng_df1], axis=1)
-    
-# else:    
-#     ng_data2 = {ng_title: net_growth}
-#     ng_df2 = pd.DataFrame(ng_data2)
-#     ng_hub = pd.concat([ng_hub, ng_df2], axis=1)
-# print('ng_hub', ng_hub.columns)
+# Net growth to df
+if ng_switch == 1:
+    if run_number == 1 and scenario == 3:
+        ng_data1 = {ng_title: net_growth,}
+        ng_df1 = pd.DataFrame(ng_data1)
+        ng_hub = pd.concat([df_ng, ng_df1], axis=1)
+    elif run_number == 1 and scenario == 4:
+        ng_data1 = {ng_title: net_growth,}
+        ng_df1 = pd.DataFrame(ng_data1)
+        ng_data0 = {'SC 3': SC3_net_growth}
+        df_3 = pd.DataFrame(ng_data0)
+        ng_hub = pd.concat([df_3, ng_df1], axis=1)
+        
+    else:    
+        ng_data2 = {ng_title: net_growth}
+        ng_df2 = pd.DataFrame(ng_data2)
+        ng_hub = pd.concat([ng_hub, ng_df2], axis=1)
+    print('ng_hub', ng_hub.columns)
 
-
-
-#temp_mean = np.mean(temp[0,:])
-temp_mean = np.mean(temp[0,2880:-1])
-print('Diurnal mean surface temperature', temp_mean)
+if spin_up==1:
+    for i in np.arange(0, 28,1):
+        print('Diurnal mean surface temperature', np.mean(sp_temp[0,(2880*i):2880*(i+1)]) , i)
+for i in np.arange(0, 3,1):
+    print('Diurnal mean surface temperature', np.mean(temp[0,(2880*i):2880*(i+1)]))
+p = np.mean(temp[0,(2880*0):2880*1])
+lll = np.mean(temp[0,(2880*1):2880*2])
+r = np.mean(temp[0,(2880*2):2880*(3)])
+print((lll+p+r)/3)
 
 end_time = time.time()
 print(f"Simulation complete. Runtime: {(end_time-start_time):.2f} seconds")
@@ -604,23 +636,69 @@ else:
 
 #%%
 #Temperature
-plt.rcParams.update({'font.size': 22})
+
+# fig, ax = plt.subplots(figsize=(10, 6))  # Create figure and axis
+# lw = 3.5
+# ax.plot(y_t, temp[20, :], label="Snow 10cm simulated", color='C0', lw=lw) 
+# ax.plot(y_t, temp[22, :], label="Snow 10cm simulated", color='orange')  # Uncomment to plot this line
+# ax.plot(y_t, tinytag_A, label="Tinytag at 10cm", color='C3', lw=lw)  
+# ax.plot(y_t, rad_data, label="Surface temperature smoothed", linestyle='-', color='C2', lw=lw)  
+# ax.set_title(f'Tinytag vs snow temp. SW k={sw_k}, with latent heat and scaled SW')
+# ax.set_xlabel('Time')
+# ax.set_ylabel('Temperature [°C]')
+# ax.legend()
+# ax.grid(alpha=0.5)
 
 
-fig, ax = plt.subplots(figsize=(10, 6))  # Create figure and axis
-lw = 3.5
-ax.plot(y_t, temp[20, :], label="Snow 10cm simulated", color='C0', lw=lw) 
-#ax.plot(y, temp[22, :], label="Snow 10cm simulated", color='orange')  # Uncomment to plot this line
-#ax.plot(y_t, tinytag_A, label="Tinytag at 10cm", color='C3', lw=lw)  
-#ax.plot(y, rad_data, label="Surface temperature smoothed", linestyle='-', color='C2', lw=lw)  
-#ax.set_xticks(np.arange(0, (72*h)+1, 1440))
-ax.set_xticks((np.arange(0, (72*h)+1, 1440)))
 
-ax.set_title(f'Tinytag vs snow temp. SW k={sw_k}, with latent heat and scaled SW')
-ax.set_xlabel('Seconds')
+
+# Assuming y_t is a pandas Series or DataFrame column with datetime strings
+y_tt = pd.to_datetime(y_t, dayfirst=True)  # Convert y_t to pandas datetime if it's not already
+
+# Convert to pydatetime
+
+
+import matplotlib.dates as mdates
+# Create figure and axis
+fig, ax = plt.subplots(figsize=(10, 6))
+
+# Line width
+lw = 3
+
+# Plot time series data
+ax.plot(y_tt, rad_data, label="Surface temperature smoothed", linestyle='-', color='gold', lw=lw) 
+ax.plot(y_tt, SC3_srf_temp , label="Surface SC3 warm", linestyle='--', color='C2', lw=lw) 
+ax.plot(y_tt, tinytag_A, label="Tinytag at 10cm", color='C3', lw=lw)  
+ax.plot(y_tt, temp[20,:], label="Snow 10cm simulated", color='C0', lw=lw) 
+
+
+ 
+
+
+
+# import matplotlib.ticker as ticker
+# ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=12))  # Adjust nbins as needed
+
+
+
+# Set the date format for the x-axis labels
+ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M %d-%m-%y'))
+
+# Set the frequency of the x-ticks
+ax.xaxis.set_major_locator(mdates.HourLocator(interval=6))  # Show every 1 hour, adjust as necessary
+ax.set_xlim([y_tt[0].replace(hour=0, minute=0, second=0), y_tt[-1]])
+
+#ax.set_title(f'Tinytag vs snow temp. SW k={sw_k}, with latent heat and scaled SW')
+ax.set_xlabel('Time')
 ax.set_ylabel('Temperature [°C]')
+plt.xticks(rotation=45)
 ax.legend()
 ax.grid(alpha=0.5)
+fig.tight_layout()
+
+# Show plot
+
+
 
 
 #%%
@@ -909,8 +987,8 @@ ax[0].text(0.96, 0.05, "a",
 pld = int(plot_depth/dx)
 label = ['30.03.22', '31.03.22', '01.04.22']
 linestyle = ['-', '-', '-', '--', '--' ]
-colors = ['darkgreen', 'limegreen', 'greenyellow', 'black', 'C1' ]
-linewith = [3.4 ,3.4 ,3.4 ,2.6 ,2.6]
+colors = ['forestgreen', 'limegreen', 'lawngreen', 'black', 'C1' ]
+linewith = [6.5 ,6.5 ,6.5 ,2.4 ,2.4]
 for i in np.arange(0,5,1):
     if i == 3:
         ax[1].plot(ng_hub['k=50'][:pld], x[:pld], label='SC3 k=50', linestyle=linestyle[i], color=colors[i], lw=linewith[i])
@@ -921,7 +999,7 @@ for i in np.arange(0,5,1):
   
 ax[1].legend()#fontsize=11)
 ax[1].set_xlabel("Net 'facetedness' [mm]")
-ax[1].set_xticks(np.arange(-0.2, 0.06, 0.05))
+ax[1].set_xticks(np.arange(-0.2, 0.05, 0.05))
 #ax[1].set_ylabel('Depth [cm]')
 ax[1].set_yticklabels([])
 ax[1].invert_yaxis()
@@ -935,3 +1013,24 @@ ax[1].text(0.91, 0.05, "b",
            verticalalignment='top', 
            horizontalalignment='left', 
            bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
+#%%
+#Spin up temp profiles
+fig, ax = plt.subplots(figsize = (9, 6))
+
+#if spin_up_has_occurred == 1:
+
+# for p in np.arange(0, sp_ny+1, h*sp_pisp):
+#     ax.plot(sp_temp[:, p], x, label= f"{sp_y[p]/3600} Hours")
+# for p in np.arange(0, ny+1, h*sp_pisp):
+#     ax.plot(temp[:, p], x, label= f"{sp_y[p]/3600} Hours")
+#ax.plot(temp[:, 0], x, label= f"{y[p]/3600} Hours", color='C1')
+
+ax.plot(sp_y[:2880*3], sp_temp[0, 2880*25:2880*28], label= 'SPIN UP', color='C1')
+ax.plot(sp_y[:2880*3], temp[0,:-1], label= 'srf temp', color='C2')
+ax.set_title('Temperature profiles spin-up')
+ax.set_xlabel('Temperature °C')
+ax.set_ylabel('Depth [cm]')
+ax.invert_yaxis()
+ax.legend(fontsize=8)
+ax.grid(alpha=0.5)
+ax.set_xticks(xticks)
