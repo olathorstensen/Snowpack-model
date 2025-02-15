@@ -25,7 +25,7 @@ import time
 start_time = time.time()
 
 ############################    Parameters   ############################ 
-runtime = 24*2            # Hours (int)
+runtime = 24*3           # Hours (int)
 dt = 30                   # Time step [seconds] (Must be a divisor of 3600) For Sc. 4 use 30s or 60s
 dx = 0.005                # Dist. interval [m]
 depth = 1                 # Snow depth from surface [m]
@@ -33,8 +33,8 @@ b_bc = 0                  # Bottom boundary condition, fixed [°C]
 pisp = 2                  # Plot interval spacer [hours] (int)
 plot_depth = 0.40         # Depth shown in plots measured from surface [m]
 
-spin_up = 0               # [0] No spin-up, [1] Run spin-up
-sp_runtime = 24*28        # Spin-up run time [Hours]
+spin_up = 0              # [0] No spin-up, [1] Run spin-up
+sp_runtime = 24*21        # Spin-up run time [Hours]
 sp_pisp = 24              # Spin-up Plot interval spacer [hours] (int)
 
 load_ic = 1               # Load IC from file [0] No, [1] Yes
@@ -42,8 +42,9 @@ ic_to_file = 1            # Writes model IC to file. If spin-up[1] -> IC given b
 data_to_file = 0          # Write radiation and atm temp data to new file (spin-up excluded) [0] No, [1] Yes
 
 bc_type = 0               # [0] Dirichlet (fixed), [1] Neumann (ghost cell)
-scenario = 3              # Choose scenario [3],[4] Not fully working yet...
-cold_T = 1                # For SC3, use [0] for org T temp, use [1] for 700m incresed elevation
+scenario = 4 
+skew_sw = 1              # For sc 3
+cold_T = 0                # For SC3, use [0] for org T temp, use [1] for 700m incresed elevation
 window_size = 30          # Rolling window for radiometer data noice reduction
 
 ng_title = 'Warmer IC'           # Title for Net_growth dataframe
@@ -412,7 +413,7 @@ if scenario == 4:
     linscale = tinytag_A[0]/ic[20]
     temp[0,:] = rad_data      # Surface BC
     temp[:,0] = ic * linscale # Scale IC
-    temp[:,0] = temp[:,0] * ic_scaling
+    #temp[:,0] = temp[:,0] * ic_scaling
     
 elif scenario == 3:
     bc_type = 1
@@ -424,6 +425,8 @@ for iy in np.arange(1, ny+1, dtype=int):
         
         if scenario == 3:
             sw_in = Solar_rad(hour_angle[iy], iy)
+            if skew_sw == 1:
+                sw_in = sw_in * SW_scaling[iy]
             if ix == 0:
                 #Surface temp. calc.
                 ghost_cell[iy-1] = Heat_flux_surface(y[iy], ix, iy, temp, sw_in)
@@ -434,7 +437,10 @@ for iy in np.arange(1, ny+1, dtype=int):
                 
         elif scenario == 4:
             Solar_rad(hour_angle[iy], iy)
-            temp[ix, iy] = Heat_flow(ix, iy, temp, bc_type, ghost_cell) + Solar_extinction(x[ix],SW_scaled[iy]) + latent[ix, iy-1]
+            if skew_sw == 1:
+                temp[ix, iy] = Heat_flow(ix, iy, temp, bc_type, ghost_cell) + Solar_extinction(x[ix],SW_scaled[iy]) + latent[ix, iy-1]
+            else:
+                temp[ix, iy] = Heat_flow(ix, iy, temp, bc_type, ghost_cell) + Solar_extinction(x[ix],SW_net[iy]) + latent[ix, iy-1]
               
         latent[ix, iy] = Latent_heat(temp[ix, iy])
         if temp[ix, iy] > 0:
@@ -459,6 +465,11 @@ for iy in np.arange(0, ny, dtype=int):
 
 if scenario == 4:
     net_growth = np.sum(fg[:,h*24:h*48], axis = 1)
+    SC4_net_growth = np.zeros([3,int(depth/dx)])
+    SC4_net_growth[0,:] = np.sum(fg[:,h*0:h*24], axis = 1)
+    SC4_net_growth[1,:] = np.sum(fg[:,h*24:h*48], axis = 1)
+    SC4_net_growth[2,:] = np.sum(fg[:,h*48:h*72], axis = 1)
+    
 else:
     #net_growth = np.sum(fg, axis = 1)
     net_growth = np.sum(fg[:,0:h*24], axis = 1)
@@ -475,7 +486,7 @@ if scenario == 3:
     SC3_10cm_temp = temp[20,:]
     SC3_net_growth = net_growth
 elif scenario == 4:
-    sw_srf = SW_net*(1 - mt.exp(-sw_k*dx))
+    sw_srf = SW_scaled*(1 - mt.exp(-sw_k*dx))
     sensible_heat = (((temp[0,:]-temp[1,:])/dx)*k) - sw_srf - LW_net
     
     LW_out = LW_net #FIX this should be changed
@@ -541,7 +552,7 @@ if ic_to_file == 1 and spin_up_has_occurred == 1:
 
 
 
-temp_mean = np.mean(temp[0,:])
+#temp_mean = np.mean(temp[0,:])
 temp_mean = np.mean(temp[0,2880:-1])
 print('Diurnal mean surface temperature', temp_mean)
 
@@ -589,21 +600,27 @@ else:
     plt.legend()
     plt.grid(alpha=0.5)
     plt.show()
-
+ 
 
 #%%
 #Temperature
-plt.figure(figsize=(10, 6))
-plt.plot(y, temp[20,:], label= "Snow 10cm simulated", color='blue') 
-#plt.plot(y, temp[18,:], label= "Snow 10cm simulated", color='orange') # Plot every whole hour
-plt.plot(y, tinytag_A, label= "Tinytag at 10cm", color ='red') # Plot every whole hour  
-plt.plot(y,rad_data, label="Surface temperature smoothed", linestyle='-', color='green') # Plot every whole hour  
-plt.title(f'Tinytag vs snow temp. SW k={sw_k}, wih latent heat and scaled SW')
-plt.xlabel('Seconds')
-plt.ylabel('Temperature [°C]')
-plt.legend()
-plt.grid(alpha=0.5)
-plt.show()
+plt.rcParams.update({'font.size': 22})
+
+
+fig, ax = plt.subplots(figsize=(10, 6))  # Create figure and axis
+lw = 3.5
+ax.plot(y_t, temp[20, :], label="Snow 10cm simulated", color='C0', lw=lw) 
+#ax.plot(y, temp[22, :], label="Snow 10cm simulated", color='orange')  # Uncomment to plot this line
+#ax.plot(y_t, tinytag_A, label="Tinytag at 10cm", color='C3', lw=lw)  
+#ax.plot(y, rad_data, label="Surface temperature smoothed", linestyle='-', color='C2', lw=lw)  
+#ax.set_xticks(np.arange(0, (72*h)+1, 1440))
+ax.set_xticks((np.arange(0, (72*h)+1, 1440)))
+
+ax.set_title(f'Tinytag vs snow temp. SW k={sw_k}, with latent heat and scaled SW')
+ax.set_xlabel('Seconds')
+ax.set_ylabel('Temperature [°C]')
+ax.legend()
+ax.grid(alpha=0.5)
 
 
 #%%
@@ -828,7 +845,7 @@ ax[0].text(0.96, 0.05, "a",
 
 pld = int(plot_depth/dx)
 linestyle = ['dotted', '-', '--', '-.', '-', '-' ]
-colors = ['C3', 'black', 'darkgrey', 'darkgrey', 'C9', 'lightsalmon' ]
+colors = ['C3', 'black', 'darkgrey', 'darkgrey','C1', 'C9' ]
 linewith = [4,4.2,2.7 ,2.7 ,2.7 ,2.7 ,2.7]
 for i, column in enumerate(ng_hub.columns):
     #linestyle = ':' if i == 0 else '--' if i > 2 else '-'  # First column dotted, others solid
@@ -853,28 +870,33 @@ ax[1].text(0.91, 0.05, "b",
 
 #%%
 
-# PAPER FIGURE SC4 
-xticks = np.arange(0,-20,-2) 
+# PAPER FIGURE SC4
+xticks = np.arange(0,-18,-2)
 pld = int(plot_depth/dx)+1
-fig, ax = plt.subplots(1, 2, figsize = (12, 6), gridspec_kw={'width_ratios': [2, 1]})
+plt.rcParams.update({'font.size': 22})
+#fig, ax = plt.subplots(1, 2, figsize = (12, 6), gridspec_kw={'width_ratios': [2, 1]})
+fig, ax = plt.subplots(1, 2, figsize=(12, 6), gridspec_kw={'width_ratios': [2, 1], 'wspace': 0.1})
 #Temperature plot
 cmap = plt.get_cmap("tab20")  # Alternatives: "viridis", "plasma", "tab10", "tab20", "Set3"
-colors = [cmap(i/ len(np.arange(h*24, h*48, h*pisp))) for i in range(len(np.arange(h*24, h*48, h*pisp)))] 
+colors = [cmap(i / len(np.arange(h*24, h*48, h*pisp))) for i in range(len(np.arange(h*24, h*48, h*pisp)))]
 
 
-for i, p in enumerate (np.arange(h*24, h*48, h*pisp)): # Plots day 2
+for i, p in enumerate(np.arange(h*24, h*48, h*pisp)):
     time_only = (base_time + timedelta(seconds=y_sec[p])).strftime("%H:%M")
-    ax[0].plot(temp[:pld, p], x[:pld], label=time_only, color=colors[i])
+    ax[0].plot(temp[:pld, p], x[:pld], label=time_only, color=colors[i], lw=2.7)
 
 ax[0].set_xlabel('Temperature [°C]')
-ax[0].set_ylabel('Depth [cm]')
+#ax[0].set_ylabel('Depth [cm]')
+ax[0].yaxis.tick_right()  # Move y-tick labels to the right
+ax[0].yaxis.set_label_position("right")  # Move y-axis label to the right
+ax[0].set_ylabel('Depth [cm]', rotation=270, labelpad=25)
 ax[0].invert_yaxis()
-ax[0].legend(fontsize=11, title="31.03.2022")
+ax[0].legend()#fontsize=11)
 ax[0].grid(alpha=0.5)
 ax[0].set_xticks(xticks)
 ax[0].xaxis.set_label_position('top')
 ax[0].xaxis.tick_top()
-ax[0].text(0.95, 0.05, "a", 
+ax[0].text(0.96, 0.05, "a", 
            #fontsize=15, 
            #fontweight='bold', 
            transform=ax[0].transAxes,
@@ -882,28 +904,34 @@ ax[0].text(0.95, 0.05, "a",
            horizontalalignment='left', 
            bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
 
-
 #Net growth near surface
-pld = int(plot_depth/dx)
-colors = ['black', 'black', 'green', 'blue', 'red' ]
-linestyle = ['dotted', '-', '--', '-', '-', ]
-for i, column in enumerate(ng_hub.columns):
 
-    ax[1].plot(ng_hub[column][:pld], x[:pld], label=column, linestyle=linestyle[i], color=colors[i])
-    
-ax[1].legend(fontsize=11)
+pld = int(plot_depth/dx)
+label = ['30.03.22', '31.03.22', '01.04.22']
+linestyle = ['-', '-', '-', '--', '--' ]
+colors = ['darkgreen', 'limegreen', 'greenyellow', 'black', 'C1' ]
+linewith = [3.4 ,3.4 ,3.4 ,2.6 ,2.6]
+for i in np.arange(0,5,1):
+    if i == 3:
+        ax[1].plot(ng_hub['k=50'][:pld], x[:pld], label='SC3 k=50', linestyle=linestyle[i], color=colors[i], lw=linewith[i])
+    elif i == 4:
+        ax[1].plot(ng_hub['Warmer IC'][:pld], x[:pld], label='SC3 warmer IC', linestyle=linestyle[i], color=colors[i], lw=linewith[i])
+    else:
+        ax[1].plot(SC4_net_growth[i,:pld], x[:pld], label=label[i], linestyle=linestyle[i], color=colors[i], lw=linewith[i])
+  
+ax[1].legend()#fontsize=11)
 ax[1].set_xlabel("Net 'facetedness' [mm]")
-ax[1].set_ylabel('Depth [cm]')
+ax[1].set_xticks(np.arange(-0.2, 0.06, 0.05))
+#ax[1].set_ylabel('Depth [cm]')
+ax[1].set_yticklabels([])
 ax[1].invert_yaxis()
 ax[1].grid(alpha=0.5)
 ax[1].xaxis.set_label_position('top')
 ax[1].xaxis.tick_top()
-ax[1].text(0.9, 0.05, "b", 
+ax[1].text(0.91, 0.05, "b", 
            #fontsize=15, 
            #fontweight='bold', 
            transform=ax[1].transAxes,
            verticalalignment='top', 
            horizontalalignment='left', 
            bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
-
-
