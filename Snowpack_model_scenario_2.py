@@ -1,9 +1,8 @@
 ### 1D snowpack temperature simulator ###
-# v1.3 
+# v1.4 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
-#   - Staggered grid for net growth plot
-#   - Added write net_growth to file
+#   - Figure for paper plot
  
     
 import numpy as np
@@ -21,10 +20,10 @@ dt = 30                  # Time step [seconds] (Must be a divisor of 3600)
 depth = 1                # Snow depth from surface [m]
 dx = 0.005               # Dist. interval [m]
 pisp = 2                 # USE INTEGERS. Give hourly plot rate
-b_bc = 0                 # Bottom boundary condition, fixed [°C]
+b_bc = 0                # Bottom boundary condition, fixed [°C]
 spin_up = 1              # [0] No spin-up, [1] Run spin-up
-sp_runtime = 24*7        # Spin-up run time [Hours]
-plot_depth = 0.35        # Depth shown in plots [m]
+sp_runtime = 24*3        # Spin-up run time [Hours]
+plot_depth = 0.40        # Depth shown in plots [m]
 ng_to_file = 1           # Writes net_growth to file
 
 
@@ -204,14 +203,17 @@ for iy in np.arange(0, ny, dtype=int):
     for ix in np.arange(0, nx, dtype=int):
         fg[ix, iy] = Facet_growth(ix, iy)
 
-net_growth = np.sum(fg, axis = 1)
+if b_bc<0:
+    net_growth_cold_bc = np.sum(fg, axis = 1)
+else:
+    net_growth = np.sum(fg, axis = 1)
 
 ############################    Data output   ############################ 
 
 current_dir = os.path.dirname(os.path.abspath(__file__)) 
 if ng_to_file == 1:
     output_file = os.path.join(current_dir, 'Net_growth_data.xlsx')
-    data_titles = [f"Net growth after {sp_y[-1]} hours"]
+    data_titles = ["Scenario 2"] #f"Net growth after {sp_y[-1]} hours"
     data = {
         data_titles[0]: net_growth,
         }
@@ -230,7 +232,7 @@ print(f"Simulation complete. Runtime: {(end_time-start_time):.2f} seconds")
     
     
 xticks = np.arange(0,-20,-2) #FIX change x-scale by MAX-MIN insted of fixed values
-pld = int(plot_depth/dx)
+pld = int(plot_depth/dx) + 1
 time_steps = ny + 1
 
 ### Sliders
@@ -372,51 +374,59 @@ plt.show()
 
 #%%
 ### Figure for the paper
-xticks = np.arange(0,-20,-2) #FIX change x-scale by MAX-MIN insted of fixed values
-pld = int(plot_depth/dx)
+plt.rcParams.update({'font.size': 24})
+xticks = np.arange(0,-22,-2) #FIX change x-scale by MAX-MIN insted of fixed values
+pld = int(plot_depth/dx) +1
 time_steps = ny + 1
 
-fig3, ax3 = plt.subplots(1, 2, figsize = (12, 6), gridspec_kw={'width_ratios': [2, 1]})
-
+#fig3, ax3 = plt.subplots(1, 2, figsize = (12, 6), gridspec_kw={'width_ratios': [2, 1]})
+fig3, ax3 = plt.subplots(1, 2, figsize=(12, 6), gridspec_kw={'width_ratios': [2, 1], 'wspace': 0.1})
 # Temperature plot
 cmap = plt.get_cmap("tab20")  # Alternatives: "viridis", "plasma", "tab10", "tab20", "Set3"
-colors = [cmap(i / len(np.arange(0, ny+1, h*pisp))) for i in range(len(np.arange(0, ny+1, h*pisp)))]
+colors = [cmap(i / len(np.arange(0, ny, h*pisp))) for i in range(len(np.arange(0, ny+1, h*pisp)))]
 
 
-for i, p in enumerate(np.arange(0, ny+1, h*pisp)):
+for i, p in enumerate(np.arange(0, ny, h*pisp)):
     time_only = (base_time + timedelta(seconds=y_sec[p])).strftime("%H:%M")
-    ax3[0].plot(temp[:pld, p], x[:pld], label=f'{time_only}', color=colors[i])
-ax3[0].set_xlabel('Temperature [°C]', fontsize = 14)
-ax3[0].set_ylabel('Depth [cm]', fontsize = 14)
+    ax3[0].plot(temp[:pld, p], x[:pld], label=f'{time_only}', color=colors[i], lw=2.5)
+ax3[0].set_xlabel('Temperature [°C]')#, fontsize = 14)
+ax3[0].set_ylabel('Depth [cm]')#, fontsize = 14)
+ax3[0].yaxis.tick_right()  # Move y-tick labels to the right
+ax3[0].yaxis.set_label_position("right")  # Move y-axis label to the right
+ax3[0].set_ylabel('Depth [cm]', rotation=270, labelpad=25)
 ax3[0].invert_yaxis()
-ax3[0].legend(fontsize=13)
+ax3[0].legend()#fontsize=13)
 ax3[0].grid(alpha=0.5)
 ax3[0].set_xticks(xticks)
 ax3[0].xaxis.set_label_position('top')
 ax3[0].xaxis.tick_top()  
-ax3[0].text(-0.09, 0.985, "a)", 
-           fontsize=15, 
-           # fontweight='bold', 
+ax3[0].text(0.96, 0.05, "a", 
+           #fontsize=15, 
+           #fontweight='bold', 
            transform=ax3[0].transAxes,
            verticalalignment='top', 
            horizontalalignment='left', 
            bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
 
+pld = int(plot_depth/dx)
 # Net growth near surface
-ax3[1].plot(net_growth[:pld], x_stag[0:pld])
-ax3[1].set_xlabel("Net 'Facetedness' [mm]", fontsize = 14)
-ax3[1].set_ylabel('Depth [cm]', fontsize = 14)
+ax3[1].plot(net_growth[:pld], x_stag[0:(pld)],linestyle='dotted', color='C3', lw=5, label='0°C')
+ax3[1].plot(net_growth_cold_bc[:pld], x_stag[0:(pld)],linestyle= '--', color='C0', lw=2.7, label='-10°C')
+ax3[1].set_xlabel("Net 'facetedness' [mm]")#, fontsize = 14)
+#ax3[1].set_ylabel('Depth [cm]')#, fontsize = 14)
+#ax3[1].legend(loc='lower left')
+ax3[1].set_yticklabels([])
 ax3[1].invert_yaxis()
 ax3[1].grid(alpha=0.5)
 ax3[1].xaxis.set_label_position('top')
 ax3[1].xaxis.tick_top()
-ax3[1].text(-0.18, 0.985, "b)", 
-           fontsize=15, 
-           # fontweight='bold', 
+ax3[1].set_xticks([-0.02, -0.01, 0, 0.01, 0.02, 0.03])
+ax3[1].text(0.91, 0.05, "b", 
+           #fontsize=15, 
+           #fontweight='bold', 
            transform=ax3[1].transAxes,
            verticalalignment='top', 
            horizontalalignment='left', 
            bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
-
-
+plt.tight_layout()
 
