@@ -1,8 +1,8 @@
 ### 1D snowpack temperature simulator ###
-# v1.4 
+# v1.5 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
-#   - Figure for paper plot
+#   - Plot for vpg_mean and vpg_mean_abs
  
     
 import numpy as np
@@ -20,7 +20,7 @@ dt = 30                  # Time step [seconds] (Must be a divisor of 3600)
 depth = 1                # Snow depth from surface [m]
 dx = 0.005               # Dist. interval [m]
 pisp = 2                 # USE INTEGERS. Give hourly plot rate
-b_bc = 0                # Bottom boundary condition, fixed [°C]
+b_bc = 0                 # Bottom boundary condition, fixed [°C]
 spin_up = 1              # [0] No spin-up, [1] Run spin-up
 sp_runtime = 24*3        # Spin-up run time [Hours]
 plot_depth = 0.40        # Depth shown in plots [m]
@@ -28,7 +28,7 @@ ng_to_file = 1           # Writes net_growth to file
 
 
 ############################    Constants   ############################   
-k = 0.1439               # Thermal conductivity snow [W/m K]
+k = 0.1439               # Thermal conductivity snow [W/m K]  0.1439 
 rho = 245                # density [kg/m3]
 cp = 2090                # Specific heat capacity of ice [J/kg °C]
 T0 = 273.16              # Ice-point temperature [K]
@@ -207,6 +207,14 @@ if b_bc<0:
     net_growth_cold_bc = np.sum(fg, axis = 1)
 else:
     net_growth = np.sum(fg, axis = 1)
+    
+    
+    
+ # Vpg mean calculation 
+vpg_mean = np.mean(vpg, axis = 1)
+vpg_mean_abs = np.mean(np.abs(vpg), axis = 1)
+vpg_std = np.std(vpg, axis=1)
+vpg_std_abs = np.std(np.abs(vpg), axis=1)
 
 ############################    Data output   ############################ 
 
@@ -410,17 +418,30 @@ ax3[0].text(0.96, 0.05, "a",
 
 pld = int(plot_depth/dx)
 # Net growth near surface
-ax3[1].plot(net_growth[:pld], x_stag[0:(pld)],linestyle='dotted', color='C3', lw=5, label='0°C')
-ax3[1].plot(net_growth_cold_bc[:pld], x_stag[0:(pld)],linestyle= '--', color='C0', lw=2.7, label='-10°C')
-ax3[1].set_xlabel("Net 'facetedness' [mm]")#, fontsize = 14)
+#ax3[1].plot(net_growth[:pld], x_stag[0:(pld)],linestyle='dotted', color='C3', lw=5, label='0°C')
+#ax3[1].plot(net_growth_cold_bc[:pld], x_stag[0:(pld)],linestyle= '--', color='C0', lw=2.7, label='-10°C')
+ax3[1].plot(vpg_mean[:pld], x_stag[:pld], linestyle='dotted', color='C3', lw=5, label='Mean')
+ax3[1].plot(vpg_mean_abs[:pld], x_stag[:pld], linestyle= '--', color='C0', lw=2.7, label='Mean abs')
+#ax3[1].plot((vpg_mean_abs[:pld]+vpg_mean[:pld]), x_stag[:pld], linestyle= '--', color='C1', lw=2.7, label='diff')
+ax3[1].fill_betweenx(x_stag[:pld], 
+                     vpg_mean[:pld] - vpg_std[:pld], 
+                     vpg_mean[:pld] + vpg_std[:pld], 
+                     color = (1.0, 0.4196, 0.1647, 0.2),
+                     label = 'Std mean')
+ax3[1].fill_betweenx(x_stag[:pld], 
+                     vpg_mean_abs[:pld] - vpg_std_abs[:pld], 
+                     vpg_mean_abs[:pld] + vpg_std_abs[:pld], 
+                     color = (0.0, 0.5451, 0.5451, 0.2), 
+                     label = 'Std mean_abs')
+ax3[1].set_xlabel("Vpg [Pa/cm]")#, fontsize = 14)
 #ax3[1].set_ylabel('Depth [cm]')#, fontsize = 14)
-#ax3[1].legend(loc='lower left')
+ax3[1].legend(loc='lower right')
 ax3[1].set_yticklabels([])
 ax3[1].invert_yaxis()
 ax3[1].grid(alpha=0.5)
 ax3[1].xaxis.set_label_position('top')
 ax3[1].xaxis.tick_top()
-ax3[1].set_xticks([-0.02, -0.01, 0, 0.01, 0.02, 0.03])
+ax3[1].set_xticks([-20, -10, 0, 10, 20, 30 ,40])
 ax3[1].text(0.91, 0.05, "b", 
            #fontsize=15, 
            #fontweight='bold', 
