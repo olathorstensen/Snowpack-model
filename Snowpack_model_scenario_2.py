@@ -1,8 +1,8 @@
 ### 1D snowpack temperature simulator ###
-# v1.5 
+# v1.6 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
-#   - Plot for vpg_mean and vpg_mean_abs
+#   - Adding threshold to mean vpg plot
  
     
 import numpy as np
@@ -211,6 +211,8 @@ else:
     
     
  # Vpg mean calculation 
+vpg_thresh = np.where(np.abs(vpg) > 5, vpg, 0)
+vpg_mean_thresh = np.mean(vpg_thresh, axis = 1)
 vpg_mean = np.mean(vpg, axis = 1)
 vpg_mean_abs = np.mean(np.abs(vpg), axis = 1)
 vpg_std = np.std(vpg, axis=1)
@@ -422,17 +424,18 @@ pld = int(plot_depth/dx)
 #ax3[1].plot(net_growth_cold_bc[:pld], x_stag[0:(pld)],linestyle= '--', color='C0', lw=2.7, label='-10°C')
 ax3[1].plot(vpg_mean[:pld], x_stag[:pld], linestyle='dotted', color='C3', lw=5, label='Mean')
 ax3[1].plot(vpg_mean_abs[:pld], x_stag[:pld], linestyle= '--', color='C0', lw=2.7, label='Mean abs')
+ax3[1].plot(vpg_mean_thresh[:pld], x_stag[:pld], linestyle= '--', color='C1', lw=2.7, label='Mean threshold')
 #ax3[1].plot((vpg_mean_abs[:pld]+vpg_mean[:pld]), x_stag[:pld], linestyle= '--', color='C1', lw=2.7, label='diff')
 ax3[1].fill_betweenx(x_stag[:pld], 
-                     vpg_mean[:pld] - vpg_std[:pld], 
-                     vpg_mean[:pld] + vpg_std[:pld], 
-                     color = (1.0, 0.4196, 0.1647, 0.2),
-                     label = 'Std mean')
+                      vpg_mean[:pld] - vpg_std[:pld], 
+                      vpg_mean[:pld] + vpg_std[:pld], 
+                      color = (1.0, 0.4196, 0.1647, 0.2),
+                      label = 'Std mean')
 ax3[1].fill_betweenx(x_stag[:pld], 
-                     vpg_mean_abs[:pld] - vpg_std_abs[:pld], 
-                     vpg_mean_abs[:pld] + vpg_std_abs[:pld], 
-                     color = (0.0, 0.5451, 0.5451, 0.2), 
-                     label = 'Std mean_abs')
+                      vpg_mean_abs[:pld] - vpg_std_abs[:pld], 
+                      vpg_mean_abs[:pld] + vpg_std_abs[:pld], 
+                      color = (0.0, 0.5451, 0.5451, 0.2), 
+                      label = 'Std mean_abs')
 ax3[1].set_xlabel("Vpg [Pa/cm]")#, fontsize = 14)
 #ax3[1].set_ylabel('Depth [cm]')#, fontsize = 14)
 ax3[1].legend(loc='lower right')
@@ -450,4 +453,18 @@ ax3[1].text(0.91, 0.05, "b",
            horizontalalignment='left', 
            bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
 plt.tight_layout()
+
+
+#%%
+# Test figure
+fig, ax = plt.subplots(1, 1, figsize = (12, 6))
+
+ax.plot(vpg_mean_abs[:pld], x_stag[:pld])
+
+ax.set_xlabel("Vpg [Pa/cm]")
+ax.set_ylabel("Depth [cm]")
+ax.grid(alpha = 0.5)
+ax.invert_yaxis()
+
+
 
