@@ -1,8 +1,8 @@
 ### 1D snowpack temperature simulator ###
-# v1.6 
+# v1.7 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
-#   - Adding threshold to mean vpg plot
+#   - Adding dtvpg (directional thresholded vapor pressure gradient)
  
     
 import numpy as np
@@ -210,7 +210,11 @@ else:
     
     
     
- # Vpg mean calculation 
+# Vpg mean calculation 
+dtvpg = np.zeros_like(vpg)
+dtvpg = np.where(vpg < -5, vpg + 5, np.where(vpg > 5, vpg - 5, 0))
+dtvpg_mean = np.mean(dtvpg, axis = 1)
+
 vpg_thresh = np.where(np.abs(vpg) > 5, vpg, 0)
 vpg_mean_thresh = np.mean(vpg_thresh, axis = 1)
 vpg_mean = np.mean(vpg, axis = 1)
@@ -459,7 +463,7 @@ plt.tight_layout()
 # Test figure
 fig, ax = plt.subplots(1, 1, figsize = (12, 6))
 
-ax.plot(vpg_mean_abs[:pld], x_stag[:pld])
+ax.plot(dtvpg_mean, x_stag)
 
 ax.set_xlabel("Vpg [Pa/cm]")
 ax.set_ylabel("Depth [cm]")
