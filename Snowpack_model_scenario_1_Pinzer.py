@@ -1,8 +1,10 @@
 ### 1D snowpack temperature simulator ###
-# v1.6 
+# v1.7 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
-#
+# - Added DTVPGE
+# - Put unused plot code in dumpster file on github
+
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -86,6 +88,7 @@ fg =  np.zeros([nx, ny+1])    # Facet growth grid
 
     # Axis and time
 x = np.linspace(0, depth*100, nx+1) # Depth axis
+x_stag = x[:-1]+dx*100/2            # Staggered x axis for vpg, fgr, fg, and ng
 y = np.round( np.arange(0, ny+1, 1) * dt/3600 , 2) # Time axis
 base_time = datetime.strptime("00:00", "%H:%M")
 y_t = [(base_time + timedelta(hours=hour)).strftime("%H:%M") for hour in y]
@@ -205,230 +208,41 @@ for iy in np.arange(0, ny+1, dtype=int):
 
 net_growth = np.sum(fg, axis = 1)
 
+# Vpg mean calculation 
+dtvpge = np.zeros_like(vpg)
+dtvpge = np.where(vpg < -5, vpg + 5, np.where(vpg > 5, vpg - 5, 0))
+dtvpge_mean = np.mean(dtvpge, axis = 1)
+
 ###################################################################
-
-
-
-### Plot of results:
-
-############## Plotly
-
-# # BC
-# fig = go.Figure()
-# fig.add_trace(go.Scatter(x = y, y = bc, mode='lines', name='Surface bc'))
-# fig.add_trace(go.Scatter(x = y, y = b_bc, mode='lines', name='Bottom bc'))
-
-# fig.update_layout(
-#     width = 900, height = 600, 
-#     title='Temperature Boundary Conditions', xaxis_title='Hours', 
-#     yaxis_title='Temperature [°C]', legend=dict(title='Legend'))
-# fig.show()
-
-# # Temp
-# fig = go.Figure()
-# for p in np.arange(0, ny+1, h*pisp):
-#     fig.add_trace(go.Scatter(x=temp[:, p], y=x, mode='lines', name=f'Time {y_t[p]}'))
-
-# fig.update_layout(
-#     width = 900, height = 600,
-#     title='Temperature', xaxis_title='Temperature [°C]', yaxis_title='Depth [cm]', 
-#                   yaxis=dict(autorange='reversed'), legend=dict(font=dict(size=8)))
-# fig.show()
-
-# # Vapor pressure
-# fig = go.Figure()
-# for p in np.arange(0, ny+1, h*pisp):
-#     fig.add_trace(go.Scatter(x=vp[:, p], y=x, mode='lines', name=f'Time {y_t[p]}'
-#     ))
-
-# fig.update_layout(
-#     width = 900, height = 600, 
-#     title='Vapor Pressure', xaxis_title='Vapor Pressure [mb]', yaxis_title='Depth [cm]',
-#                   yaxis=dict(autorange='reversed'))
-# fig.show()
-
-# fig = go.Figure()
-# fig.add_trace(go.Scatter(x = y, y = vp[0, :], mode='lines', name='Surface vp'))
-# fig.add_trace(go.Scatter(x = y, y = vp[10, :], mode='lines', name='Bottom vp'))
-
-# fig.update_layout(
-#     width = 900, height = 600,
-#     title='Vapor Pressure', xaxis_title='Time  [h]', 
-#     yaxis_title='Vapor Pressure [mb]', legend=dict(title='Legend'))
-# fig.show()
-
-# # VPG
-# fig = go.Figure()
-# fig.add_trace(go.Scatter(x = y, y = vpg[0, :], mode='lines', name='Surface vpg'))
-# fig.add_trace(go.Scatter(x = y, y = vpg[10, :], mode='lines', name='Bottom vpg'))
-
-# fig.update_layout(
-#     width = 900, height = 600,
-#     title='Vapor Pressure Gradient', xaxis_title='Time  [h]', 
-#     yaxis_title='Vapor Pressure Gradient [Pa/cm]', legend=dict(title='Legend'))
-# fig.show()
-
-# # Growth rate
-# fig = go.Figure()
-# fig.add_trace(go.Scatter(x = y, y = fgr[0, :], mode='lines', name='Surface fgr'))
-# fig.add_trace(go.Scatter(x = y, y = fgr[9, :], mode='lines', name='Bottom fgr'))
-
-# fig.update_layout(
-#     width = 900, height = 600,
-#     title='Facet Growth Rate', xaxis_title='Time  [h]', 
-#     yaxis_title='Facet growth rate [nm/s]', legend=dict(title='Legend'))
-# fig.show()
-
-# Growth
-# fig = go.Figure()
-# fig.add_trace(go.Scatter(x = y, y = fg[0, :], mode='lines', name='Surface fg'))
-# fig.add_trace(go.Scatter(x = y, y = fg[10, :], mode='lines', name='Bottom fg'))
-
-# fig.update_layout(
-#     width = 900, height = 600,
-#     title='Facet Growth', xaxis_title='Time  [h]', 
-#     yaxis_title='Facet growth [mm]', legend=dict(title='Legend'))
-# fig.show()
-
-# # Net facet growth
-# fig = go.Figure()
-# fig.add_trace(go.Scatter(x = net_growth[0:9], y = x, mode='lines', name='Net Growth'))
-
-# fig.update_layout(
-#     width = 900,
-#     height = 600,
-#     title='Net Facet Growth',
-#     xaxis_title='Net Growth [mm]',
-#     yaxis_title='Depth [cm]',
-#     yaxis=dict(autorange='reversed'))
-# fig.show()
-
-# ############## Matplotlib
-# # BC
-# plt.figure(figsize=(9, 6))
-# plt.plot(y, bc, label='Surface bc')
-# plt.plot(y, b_bc, label='Bottom bc')
-# plt.title('Temperature Boundary Conditions')
-# plt.xlabel('Hours')
-# plt.ylabel('Temperature [°C]')
-# plt.legend(title='Legend')
-# plt.grid(True, alpha=0.5)
-# plt.show()
-
-# # Temp
-# plt.figure(figsize=(9, 6))
-# for p in np.arange(0, ny+1, h*pisp):
-#     plt.plot(temp[:, p], x, label=f'Time {y_t[p]}')
-# plt.title('Temperature')
-# plt.xlabel('Temperature [°C]')
-# plt.ylabel('Depth [cm]')
-# plt.gca().invert_yaxis()
-# plt.legend(fontsize=8)
-# plt.grid(True, alpha=0.5)
-# plt.show()
-
-# # Vapor pressure
-# plt.figure(figsize=(9, 6))
-# for p in np.arange(0, ny+1, h*pisp):
-#     plt.plot(vp[:, p], x, label=f'Time {y_t[p]}')
-# plt.title('Vapor Pressure')
-# plt.xlabel('Vapor Pressure [mb]')
-# plt.ylabel('Depth [cm]')
-# plt.gca().invert_yaxis()
-# plt.grid(True, alpha=0.5)
-# plt.legend()
-# plt.show()
-
-# plt.figure(figsize=(9, 6))
-# plt.plot(y, vp[0, :], label='Surface vp')
-# plt.plot(y, vp[-1, :], label='Bottom vp')
-# plt.title('Vapor Pressure')
-# plt.xlabel('Time [h]')
-# plt.ylabel('Vapor Pressure [mb]')
-# plt.legend()
-# plt.grid(True, alpha=0.5)
-# plt.show()
-
-# # VPG
-# plt.figure(figsize=(9, 6))
-# plt.plot(y, vpg[0, :], label='Surface vpg')
-# plt.plot(y, vpg[-1, :], label='Bottom vpg')
-# plt.title('Vapor Pressure Gradient')
-# plt.xlabel('Time [h]')
-# plt.ylabel('Vapor Pressure Gradient [Pa/cm]')
-# plt.legend(title='Legend')
-# plt.grid(True, alpha=0.5)
-# plt.show()
-
-# # Growth rate
-# plt.figure(figsize=(9, 6))
-# plt.plot(y, fgr[0, :], label='Surface fgr')
-# plt.plot(y, fgr[-1, :], label='Bottom fgr')
-# plt.title('Facet Growth Rate')
-# plt.xlabel('Time [h]')
-# plt.ylabel('Facet Growth Rate [nm/s]')
-# plt.legend(title='Legend')
-# plt.grid(True, alpha=0.5)
-# plt.show()
-
-# # Growth 
-# plt.figure(figsize=(9, 6))
-# plt.plot(y, fg[0, :], label='Surface fg')
-# plt.plot(y, fg[-1, :], label='Bottom fg')
-# plt.title('Facet Growth')
-# plt.xlabel('Time [h]')
-# plt.ylabel('Facet Growth [mm]')
-# plt.legend(title='Legend')
-# plt.grid(True, alpha=0.5)
-# plt.show()
-
-# # Net growth
-# plt.figure(figsize=(9, 6))
-# plt.plot(net_growth, x[0:-1], label='Net Growth')
-# plt.title('Net Facet Growth')
-# plt.xlabel('Net Growth [mm]')
-# plt.ylabel('Depth [cm]')
-# plt.gca().invert_yaxis()  # Reverse the y-axis for depth
-# plt.grid(True, alpha=0.5)
-# plt.show()
-
 #%%
-### Figure for the paper
+
+# Plot for the paper
 plt.rcParams.update({'font.size': 22})
 fig, ax = plt.subplots(1, 2, figsize=(12, 6), gridspec_kw={'width_ratios': [2, 1], 'wspace': 0.2})
 
 # Facet growth rate
-ax[0].plot(y, fgr[0, :], label='Upper 2mm', lw=2.5)
-ax[0].plot(y, fgr[-1, :], label='Lower 2mm', lw=2.5)
-ax[0].set_xlabel('Time [h]')#, fontsize = 14)
-ax[0].set_ylabel('Facet growth rate [nm/s]')#, fontsize = 14)
-ax[0].legend()#fontsize=13)
+ax[0].plot(y, dtvpge[0, :], label='Uppermost 2 mm', lw=2.5)
+ax[0].plot(y, dtvpge[-1, :], label='Lowermost 2 mm', lw=2.5)
+ax[0].set_xlabel('Time [h]')
+ax[0].set_ylabel('DTVPGE')     
+ax[0].legend()
 ax[0].grid(alpha=0.5)
 ax[0].set_xticks(np.arange(0, 25, 6))
-#ax[0].xaxis.set_label_position('top')
-#ax[0].xaxis.tick_top()
-ax[0].text(0.017, 0.98, "a)", 
-           #fontsize=15, 
-           # fontweight='bold', 
-           transform=ax[0].transAxes,  # Use axis-relative coordinates
-           verticalalignment='top', 
-           horizontalalignment='left', 
-           bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
+ax[0].text(0.017, 0.98, "a)",  
+            transform=ax[0].transAxes,
+            verticalalignment='top', 
+            horizontalalignment='left', 
+            bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
 
 # Net growth near surface
-ax[1].plot(net_growth, x[0:-1]+dx*100/2, label='Net growth', lw=2.5, color='black')
-ax[1].set_xlabel("Net 'facetedness' [mm]")#, fontsize = 14)
-ax[1].set_ylabel('Depth [cm]')# fontsize = 14)
+ax[1].plot(dtvpge_mean, x_stag, lw=2.5, color='black')
+ax[1].set_xlabel("Mean DTVPGE")
+ax[1].set_ylabel('Depth [cm]')
 ax[1].invert_yaxis()
 ax[1].grid(alpha=0.5)
-ax[1].set_xticks([-0.004, 0, 0.004])
 ax[1].set_yticks(np.arange(0,2.5, 0.5))
-#ax[1].xaxis.set_label_position('top')
-#ax[1].xaxis.tick_top()
-ax[1].text(0.035, 0.98, "b)", 
-           #fontsize=15, 
-            # fontweight='bold', 
-           transform=ax[1].transAxes,  # Use axis-relative coordinates
+ax[1].text(0.035, 0.98, "b)",  
+           transform=ax[1].transAxes,
            verticalalignment='top', 
            horizontalalignment='left', 
            bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
