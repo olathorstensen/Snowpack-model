@@ -1,9 +1,8 @@
 ### 1D snowpack temperature simulator ###
-# v1.5 
+# v1.6 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
-# - Added staggered x axis
-
+#
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -87,7 +86,6 @@ fg =  np.zeros([nx, ny+1])    # Facet growth grid
 
     # Axis and time
 x = np.linspace(0, depth*100, nx+1) # Depth axis
-x_stag = x[:-1]+dx*100/2            # Staggered x axis for vpg, fgr, fg, and ng
 y = np.round( np.arange(0, ny+1, 1) * dt/3600 , 2) # Time axis
 base_time = datetime.strptime("00:00", "%H:%M")
 y_t = [(base_time + timedelta(hours=hour)).strftime("%H:%M") for hour in y]
@@ -396,20 +394,21 @@ net_growth = np.sum(fg, axis = 1)
 
 #%%
 ### Figure for the paper
-fig, ax = plt.subplots(1, 2, figsize = (12, 6), gridspec_kw={'width_ratios': [2, 1]})
+plt.rcParams.update({'font.size': 22})
+fig, ax = plt.subplots(1, 2, figsize=(12, 6), gridspec_kw={'width_ratios': [2, 1], 'wspace': 0.2})
 
 # Facet growth rate
-ax[0].plot(y, fgr[0, :], label='Surface')
-ax[0].plot(y, fgr[-1, :], label='Base')
-ax[0].set_xlabel('Time [h]', fontsize = 14)
-ax[0].set_ylabel('Facet growth rate [nm/s]', fontsize = 14)
-ax[0].legend(fontsize=13)
+ax[0].plot(y, fgr[0, :], label='Upper 2mm', lw=2.5)
+ax[0].plot(y, fgr[-1, :], label='Lower 2mm', lw=2.5)
+ax[0].set_xlabel('Time [h]')#, fontsize = 14)
+ax[0].set_ylabel('Facet growth rate [nm/s]')#, fontsize = 14)
+ax[0].legend()#fontsize=13)
 ax[0].grid(alpha=0.5)
 ax[0].set_xticks(np.arange(0, 25, 6))
-ax[0].xaxis.set_label_position('top')
-ax[0].xaxis.tick_top()
+#ax[0].xaxis.set_label_position('top')
+#ax[0].xaxis.tick_top()
 ax[0].text(0.017, 0.98, "a)", 
-           fontsize=15, 
+           #fontsize=15, 
            # fontweight='bold', 
            transform=ax[0].transAxes,  # Use axis-relative coordinates
            verticalalignment='top', 
@@ -417,17 +416,20 @@ ax[0].text(0.017, 0.98, "a)",
            bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
 
 # Net growth near surface
-ax[1].plot(net_growth, x_stag, label='Net growth')
-ax[1].set_xlabel("Net 'Facetedness' [mm]", fontsize = 14)
-ax[1].set_ylabel('Depth [cm]', fontsize = 14)
+ax[1].plot(net_growth, x[0:-1]+dx*100/2, label='Net growth', lw=2.5, color='black')
+ax[1].set_xlabel("Net 'facetedness' [mm]")#, fontsize = 14)
+ax[1].set_ylabel('Depth [cm]')# fontsize = 14)
 ax[1].invert_yaxis()
 ax[1].grid(alpha=0.5)
-ax[1].xaxis.set_label_position('top')
-ax[1].xaxis.tick_top()
+ax[1].set_xticks([-0.004, 0, 0.004])
+ax[1].set_yticks(np.arange(0,2.5, 0.5))
+#ax[1].xaxis.set_label_position('top')
+#ax[1].xaxis.tick_top()
 ax[1].text(0.035, 0.98, "b)", 
-           fontsize=15, 
+           #fontsize=15, 
             # fontweight='bold', 
            transform=ax[1].transAxes,  # Use axis-relative coordinates
            verticalalignment='top', 
            horizontalalignment='left', 
            bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
+plt.tight_layout()
