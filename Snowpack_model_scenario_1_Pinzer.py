@@ -1,9 +1,8 @@
 ### 1D snowpack temperature simulator ###
-# v1.7 
+# v1.8 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
-# - Added DTVPGE
-# - Put unused plot code in dumpster file on github
+# - Fixing small things on figure
 
 
 import numpy as np
@@ -220,28 +219,32 @@ dtvpge_mean = np.mean(dtvpge, axis = 1)
 plt.rcParams.update({'font.size': 22})
 fig, ax = plt.subplots(1, 2, figsize=(12, 6), gridspec_kw={'width_ratios': [2, 1], 'wspace': 0.2})
 
-# Facet growth rate
+# DTVPGE with time
 ax[0].plot(y, dtvpge[0, :], label='Uppermost 2 mm', lw=2.5)
 ax[0].plot(y, dtvpge[-1, :], label='Lowermost 2 mm', lw=2.5)
 ax[0].set_xlabel('Time [h]')
-ax[0].set_ylabel('DTVPGE')     
+ax[0].set_ylabel('DTVPGE [Pa/cm]')     
 ax[0].legend()
 ax[0].grid(alpha=0.5)
 ax[0].set_xticks(np.arange(0, 25, 6))
-ax[0].text(0.017, 0.98, "a)",  
+ax[0].text(0.968, 0.05, "a",  
             transform=ax[0].transAxes,
             verticalalignment='top', 
             horizontalalignment='left', 
             bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
 
-# Net growth near surface
+# DTVPGE near surface
 ax[1].plot(dtvpge_mean, x_stag, lw=2.5, color='black')
-ax[1].set_xlabel("Mean DTVPGE")
+ax[1].set_xlabel("Mean DTVPGE [Pa/cm]")
 ax[1].set_ylabel('Depth [cm]')
+# ax[1].yaxis.tick_right() 
+# ax[1].yaxis.set_label_position("right")
+# ax[1].yaxis.label.set_rotation(270)
+# ax[1].yaxis.label.set_position((1.1, 0.5))
 ax[1].invert_yaxis()
 ax[1].grid(alpha=0.5)
-ax[1].set_yticks(np.arange(0,2.5, 0.5))
-ax[1].text(0.035, 0.98, "b)",  
+ax[1].set_yticks(np.arange(0, 2.5, 0.5))
+ax[1].text(0.935, 0.05, "b",  
            transform=ax[1].transAxes,
            verticalalignment='top', 
            horizontalalignment='left', 
