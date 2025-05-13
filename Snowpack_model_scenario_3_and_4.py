@@ -1,13 +1,13 @@
 ### 1D Snowpack Temperature SimOlaThor ###
-# v3.4 Scenario 3 and 4 
+# v3.5 Scenario 3 and 4 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
-#   - Adding DTVPGE
-#   - Plotting scenario 3 post review
+#   - Shifting colors in SC3 temp plot
+#   - Added abs mean vpg plot
+#   - Zoomed in on bump in subsurface mean dtvpge in fig 5c
 
 
 # Comment: 
-#   - TODO Change color for temp plot,
 #   - Instenses to looked at marked with "FIX"
 
 #Storagee of latent heat
@@ -37,13 +37,13 @@ pisp = 2                   # Plot interval spacer [hours] (int)
 plot_depth = 0.40          # Depth shown in plots measured from surface [m]
 
 spin_up = 1             # [0] No spin-up, [1] Run spin-up
-sp_runtime = 24*3        # Spin-up run time [Hours]
+sp_runtime = 24*14        # Spin-up run time [Hours]
 sp_pisp = 24              # Spin-up Plot interval spacer [hours] (int)
 
 load_ic = 0               # Load IC from file [0] No, [1] Yes
 ic_to_file = 0            # Writes model IC to file. If spin-up[1] -> IC given by end of spin-up temp. [0] No, [1] Yes
 data_to_file = 0          # Write radiation and atm temp data to new file (spin-up excluded) [0] No, [1] Yes
-ic_scaling = 1
+ic_scaling = 1            # How warm or cold the IC should be. Warmer IC  [0.7], colder IC [1.3]
 
 skew_sw = 0              # For sc 3 or maybe only 4?
 cold_T = 1                # For SC3, use [0] for org T temp, use [1] for 700m incresed elevation
@@ -56,7 +56,7 @@ ng_switch = 1
 
 
 ############################    Snow Parameters multi run Scenario 3   ############################ 
-ng_title_list = ['K = 50', 'K = 100', 'K = 230', 'Warmer IC', 'Colder IC']           # Title for Net_growth dataframe
+ng_title_list = ['K = 50 $m^{-1}$', 'K = 100 $m^{-1}$', 'K = 230 $m^{-1}$', 'Warmer IC', 'Colder IC']           # Title for dtvpge dataframe
 sw_k_list = [50, 100, 230, 50, 50]                                                # Solar extinction coefficient (k)
 ic_scaling_list = [1, 1, 1, 0.7, 1.3]                                            # Scales IC 0.7 -30% scaling, 1.3 +30% scaling
 
@@ -511,9 +511,14 @@ for run in range (1, runs + 1):
         #net_growth = np.sum(fg, axis = 1)
         net_growth = np.sum(fg[:,0:h*24], axis = 1)
     
-    # DTVPG calculations
+    # DTVPGE calculations
     dtvpge = np.where(vpg < -5, vpg + 5, np.where(vpg > 5, vpg - 5, 0))
     dtvpge_mean = np.mean(dtvpge, axis = 1)
+    
+    if run == 1:
+        dtvpge_abs = np.abs(dtvpge)
+        dtvpge_abs_mean = np.mean(dtvpge_abs, axis = 1)
+        
     
     
     ############################    Data output   ############################ 
@@ -591,12 +596,6 @@ for run in range (1, runs + 1):
     if run == 1:
         temp_plot_SC3 = temp                         # When doing multi runs, plot temps from first run
 
-    # for i in np.arange(0, runtime/24, 1):
-    #     print('Diurnal mean surface temperature', np.mean(temp[0,(2880*i):2880*(i+1)]))
-    # p = np.mean(temp[0,(2880*0):2880*1])
-    # lll = np.mean(temp[0,(2880*1):2880*2])
-    # r = np.mean(temp[0,(2880*2):2880*(3)])
-    # print((lll+p+r)/3)
 
 ####################################################################################
 end_time = time.time()
@@ -605,10 +604,6 @@ print(f"Simulation complete. Runtime: {(end_time-start_time):.2f} seconds")
 
 #%%
 ##########################     Plots    ########################## 
-xticks = np.arange(0,-20,-2) 
-pld = int(plot_depth/dx)
-
-
 
 
 ### Plot-Block: Can be run independently from model routine in Spoider  
@@ -792,7 +787,6 @@ button_up.on_clicked(go_higher)
 plt.show()
 
 
-
 #%%
 
 # PAPER FIGURE SC3
@@ -800,8 +794,9 @@ pld = int(plot_depth/dx)+1
 fig, ax = plt.subplots(1, 2, figsize=(12, 6), gridspec_kw={'width_ratios': [2, 1], 'wspace': 0.1})
 
 # Temperature plot
-cmap = plt.get_cmap("turbo_r")  # Alternatives: "viridis", "plasma", "tab10", "tab20", "Set3"
-colors = [cmap(i / len(np.arange(0, h*24, h*pisp))) for i in range(len(np.arange(0, h*24, h*pisp)))]
+cmap = plt.get_cmap("turbo_r")
+colors = [cmap(i / 12) for i in range(12)]
+colors = colors[-5:] + colors [:-5]
 
 
 for i, p in enumerate(np.arange(0, h*24, h*pisp)):
@@ -809,19 +804,16 @@ for i, p in enumerate(np.arange(0, h*24, h*pisp)):
     ax[0].plot(temp_plot_SC3[:pld, p], x[:pld], label=time_only, color=colors[i], lw=2.7)
 
 ax[0].set_xlabel('Temperature [°C]')
-#ax[0].set_ylabel('Depth [cm]')
-ax[0].yaxis.tick_right()  # Move y-tick labels to the right
-ax[0].yaxis.set_label_position("right")  # Move y-axis label to the right
+ax[0].yaxis.tick_right() 
+ax[0].yaxis.set_label_position("right")  
 ax[0].set_ylabel('Depth [cm]', rotation=270, labelpad=25)
 ax[0].invert_yaxis()
-ax[0].legend()#fontsize=11)
+ax[0].legend()
 ax[0].grid(alpha=0.5)
 ax[0].set_xticks(np.arange(0,-22,-2))
 ax[0].xaxis.set_label_position('top')
 ax[0].xaxis.tick_top()
-ax[0].text(0.968, 0.05, "a", 
-           #fontsize=15, 
-           #fontweight='bold', 
+ax[0].text(0.968, 0.05, "a",  
            transform=ax[0].transAxes,
            verticalalignment='top', 
            horizontalalignment='left', 
@@ -830,23 +822,18 @@ ax[0].text(0.968, 0.05, "a",
 # Mean DTVPGE near surface
 linestyle = ['dotted', '-', '--', '-.', '-', '-' ]
 colors = ['C3', 'black', 'darkgrey', 'darkgrey','C1', 'C9' ]
-linewith = [4,4.2,2.7 ,2.7 ,2.7 ,2.7 ,2.7]
+linewidth = [4,4.2,2.7 ,2.7 ,2.7 ,2.7 ,2.7]
 for i, column in enumerate(ng_hub.columns):
-    #linestyle = ':' if i == 0 else '--' if i > 2 else '-'  # First column dotted, others solid
-    ax[1].plot(ng_hub[column][:pld], x_stag[:pld], label=column, linestyle=linestyle[i], color=colors[i], lw=linewith[i])
+    ax[1].plot(ng_hub[column][:pld], x_stag[:pld], label=column, linestyle=linestyle[i], color=colors[i], lw=linewidth[i])
   
 ax[1].legend()
-ax[1].set_xlabel("Mean DTVPGE")
-# ax[1].set_xticks(np.arange(-0.2, 0.06, 0.05))
-#ax[1].set_ylabel('Depth [cm]')
+ax[1].set_xlabel("Mean DTVPGE [Pa/cm]")
 ax[1].set_yticklabels([])
 ax[1].invert_yaxis()
 ax[1].grid(alpha=0.5)
 ax[1].xaxis.set_label_position('top')
 ax[1].xaxis.tick_top()
-ax[1].text(0.93, 0.05, "b", 
-           #fontsize=15, 
-           #fontweight='bold', 
+ax[1].text(0.93, 0.05, "b",  
            transform=ax[1].transAxes,
            verticalalignment='top', 
            horizontalalignment='left', 
