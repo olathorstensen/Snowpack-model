@@ -1,9 +1,9 @@
 ### 1D snowpack temperature simulator ###
-# v1.8 
+# v1.9 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
-#   - Plotting post review
-#   - Code cleanup
+#   - Shifted colors in temp plot
+#   - Fixed typos
  
     
 import numpy as np
@@ -29,8 +29,10 @@ plot_depth = 0.40        # Depth shown in plots [m]
 ng_to_file = 1           # Writes net_growth to file
 
 
+
 ############################    Snow Parameters 2nd run   ############################ 
 b_bc_2 = -10                 # Bottom boundary condition, fixed [°C]
+
 
 
 ############################    Constants   ############################   
@@ -41,7 +43,6 @@ T0 = 273.16              # Ice-point temperature [K]
 a = k/(rho*cp)           # Thermal diffusivity [m2/s]
 r = a*(dt/(dx*dx))       # Must be < 0.5 for model stability [1]
 h = int((3600/dt))       # Number of dt increments between each whole hour [1]
-
 
 
 
@@ -87,9 +88,6 @@ def Facet_growth(ix, iy):
     return fg
 
 
-
-    
-    
 
 #########################    Model loop    #########################
 for run in range (1, runs + 1):
@@ -150,7 +148,6 @@ for run in range (1, runs + 1):
 
 
 #####################     Spin up    ##################### 
-
 
     if spin_up == 1:
         print('Spin-up initiated. Runtime', sp_runtime, 'hours')
@@ -220,7 +217,8 @@ for run in range (1, runs + 1):
 
     
     
-    ############################    Data output   ############################ 
+    ############################    Data output   ############################
+    
     current_dir = os.path.dirname(os.path.abspath(__file__)) 
     if ng_to_file == 1 and run == 1:
         output_file = os.path.join(current_dir, 'DTVPGE_data.xlsx')
@@ -249,9 +247,9 @@ time_steps = ny + 1
 fig3, ax3 = plt.subplots(1, 2, figsize=(12, 6), gridspec_kw={'width_ratios': [2, 1], 'wspace': 0.1})
 
 # Temperature plot
-cmap = plt.get_cmap("tab20")  # Alternatives: "viridis", "plasma", "tab10", "tab20", "Set3"
-colors = [cmap(i / len(np.arange(0, ny, h*pisp))) for i in range(len(np.arange(0, ny+1, h*pisp)))]
-
+cmap = plt.get_cmap("turbo_r")  # Alternatives: "viridis", "plasma", "tab10", "tab20", "Set3"
+colors = [cmap(i / 12) for i in range(12)]
+colors = colors[-5:] + colors [:-5] # Change to 5?
 
 for i, p in enumerate(np.arange(0, ny, h*pisp)):
     time_only = (base_time + timedelta(seconds=y_sec[p])).strftime("%H:%M")
@@ -273,12 +271,10 @@ ax3[0].text(0.968, 0.05, "a",
            horizontalalignment='left', 
            bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
 
-pld = int(plot_depth/dx) + 1
-
 # DTVPGE near surface
-ax3[1].plot(dtvpge_mean[:pld], x_stag[0:(pld)],linestyle='dotted', color='C3', lw=5, label='0°C')
-ax3[1].plot(dtvpge_mean_cold_bc[:pld], x_stag[0:(pld)],linestyle= '--', color='C0', lw=2.7, label='-10°C')
-ax3[1].set_xlabel("DTVPGE [Pa/cm]")
+ax3[1].plot(dtvpge_mean[:pld], x_stag[0:(pld)],linestyle='dotted', color='C3', lw=5, label=' Lower BC = 0°C')
+ax3[1].plot(dtvpge_mean_cold_bc[:pld], x_stag[0:(pld)],linestyle= '--', color='C0', lw=2.7, label='Lower BC = -10°C')
+ax3[1].set_xlabel("Mean DTVPGE [Pa/cm]")
 ax3[1].legend(loc='lower right', bbox_to_anchor=(0.9, 0))
 ax3[1].set_yticklabels([])
 ax3[1].invert_yaxis()
