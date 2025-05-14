@@ -1,11 +1,11 @@
 ### 1D Snowpack Temperature SimOlaThor ###
-# v3.5 Scenario 3 and 4 
+# v3.6 Scenario 3 and 4 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
 #   - Shifting colors in SC3 temp plot
 #   - Added abs mean vpg plot
 #   - Zoomed in on bump in subsurface mean dtvpge in fig 5c
-
+#   - Added code for FIG 7
 
 # Comment: 
 #   - Instenses to looked at marked with "FIX"
@@ -28,7 +28,8 @@ start_time = time.time()
 
 ############################    Parameters   ############################ 
 scenario = 3                # Must be 3 or 4. Read paper for explanation, dummy.
-runs = 5                   # Number of model runs (spinup + main model) must be
+runs = 1                   # Number of model runs (spinup + main model) must be
+runtime = 24*2
 dt = 30                    # Time step [seconds] (Must be a divisor of 3600) For Sc. 4 use 30s or 60s
 dx = 0.005                 # Dist. interval [m]
 depth = 1                  # Snow depth from surface [m]
@@ -51,7 +52,7 @@ window_size = 30          # Rolling window for radiometer data noise reduction
 sw_k = 50                # Solar extinction coefficient (k) 
 
 ng_title = 'K = 50'           # Title for DTVPGE dataframe
-ng_switch = 1
+ng_switch = 0
 
 
 
@@ -121,10 +122,10 @@ if load_ic > 0:
     row = df1.iloc[:,0].values
     ic = np.array(row, dtype=float)
 
-if scenario == 3:
-    input_file = os.path.join(current_dir, 'DTVPGE_data.xlsx')
-    print("File loaded:", input_file)
-    df_ng = pd.read_excel(input_file, header=0)    
+#if scenario == 3:  #FIX should be able to run with the file?
+    # input_file = os.path.join(current_dir, 'DTVPGE_data.xlsx')
+    # print("File loaded:", input_file)
+    # df_ng = pd.read_excel(input_file, header=0)    
     
 if scenario  == 4:
     # Radiometer data
@@ -192,9 +193,9 @@ if scenario  == 4:
             tinytag_B = np.array(df_tf.iloc[:,1].values, dtype=float)
             
             
-
-    
     SW_scaled = SW_net * SW_scaling
+    
+    
 
 
 ###########################    Functions    ###########################
@@ -338,8 +339,9 @@ for run in range (1, runs + 1):
     
     #########################    Model domain    #########################
             
-    if scenario == 3:
+    if scenario == 3 and runs > 1:
         runtime = 24        # Hours (int)
+        print("runtime overwriten to", runtime)
     if scenario == 4:
         runtime = 24*3      # Hours (int)
 
@@ -908,7 +910,7 @@ ax[1].text(0.91, 0.05, "b",
            bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
 #%%
 #Spin up temp profiles
-fig, ax = plt.subplots(figsize = (9, 6))
+#fig, ax = plt.subplots(figsize = (9, 6))
 
 #if spin_up_has_occurred == 1:
 
@@ -918,12 +920,32 @@ fig, ax = plt.subplots(figsize = (9, 6))
 #     ax.plot(temp[:, p], x, label= f"{sp_y[p]/3600} Hours")
 #ax.plot(temp[:, 0], x, label= f"{y[p]/3600} Hours", color='C1')
 
-ax.plot(sp_y[:2880*3], sp_temp[0, 2880*25:2880*28], label= 'SPIN UP', color='C1')
-ax.plot(sp_y[:2880*3], temp[0,:-1], label= 'srf temp', color='C2')
-ax.set_title('Temperature profiles spin-up')
-ax.set_xlabel('Temperature °C')
-ax.set_ylabel('Depth [cm]')
-ax.invert_yaxis()
-ax.legend(fontsize=8)
-ax.grid(alpha=0.5)
-ax.set_xticks(xticks)
+# ax.plot(sp_y[:2880*3], sp_temp[0, 2880*25:2880*28], label= 'SPIN UP', color='C1')
+# ax.plot(sp_y[:2880*3], temp[0,:-1], label= 'srf temp', color='C2')
+# ax.set_title('Temperature profiles spin-up')
+# ax.set_xlabel('Temperature °C')
+# ax.set_ylabel('Depth [cm]')
+# ax.invert_yaxis()
+# ax.legend(fontsize=8)
+# ax.grid(alpha=0.5)
+
+
+# FIGURE 7
+plt.figure(figsize=(9, 6))
+#plt.rcParams.update({'font.size': 22})
+plt.plot(y_hours, dtvpge[0,:], label='0 - 5 mm', lw=2)
+plt.plot(y_hours, dtvpge[3,:], label='15 - 20 mm', lw=2)
+plt.plot(y_hours, dtvpge[5,:], label='25 - 30 mm', lw=2)
+plt.plot(y_hours, dtvpge[9,:], label='45 - 50 mm', lw=2)
+plt.plot(y_hours, dtvpge[29,:], label='145 - 150 mm', lw=2)
+plt.title('')
+plt.xlabel('Time [hours')
+plt.ylabel('DTVPGE')
+plt.xlabel('Time [hours]')
+plt.legend(loc="lower left")
+plt.grid(True, alpha=0.5)
+plt.xticks([0,12,24,36,48])
+plt.tight_layout()
+plt.show()
+
+
