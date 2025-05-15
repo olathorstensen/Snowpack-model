@@ -1,11 +1,10 @@
 ### 1D Snowpack Temperature SimOlaThor ###
-# v3.6 Scenario 3 and 4 
+# v3.7 Scenario 3 and 4 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
-#   - Shifting colors in SC3 temp plot
-#   - Added abs mean vpg plot
-#   - Zoomed in on bump in subsurface mean dtvpge in fig 5c
-#   - Added code for FIG 7
+#   - Merged Ola's work on figure 7 and Thor's work on scenario 4
+#   - SC4 can now be plotted fully
+
 
 # Comment: 
 #   - Instenses to looked at marked with "FIX"
@@ -27,15 +26,13 @@ import time
 start_time = time.time()
 
 ############################    Parameters   ############################ 
-scenario = 3                # Must be 3 or 4. Read paper for explanation, dummy.
-runs = 1                   # Number of model runs (spinup + main model) must be
-runtime = 24*2
+scenario = 4                # Must be 3 or 4. Read paper for explanation, dummy.                  
 dt = 30                    # Time step [seconds] (Must be a divisor of 3600) For Sc. 4 use 30s or 60s
 dx = 0.005                 # Dist. interval [m]
 depth = 1                  # Snow depth from surface [m]
 b_bc = 0                   # Bottom boundary condition, fixed [°C]
 pisp = 2                   # Plot interval spacer [hours] (int)
-plot_depth = 0.40          # Depth shown in plots measured from surface [m]
+plot_depth = 0.35          # Depth shown in plots measured from surface [m]
 
 spin_up = 1             # [0] No spin-up, [1] Run spin-up
 sp_runtime = 24*14        # Spin-up run time [Hours]
@@ -46,22 +43,36 @@ ic_to_file = 0            # Writes model IC to file. If spin-up[1] -> IC given b
 data_to_file = 0          # Write radiation and atm temp data to new file (spin-up excluded) [0] No, [1] Yes
 ic_scaling = 1            # How warm or cold the IC should be. Warmer IC  [0.7], colder IC [1.3]
 
-skew_sw = 0              # For sc 3 or maybe only 4?
-cold_T = 1                # For SC3, use [0] for org T temp, use [1] for 700m incresed elevation
+
+cold_T = 0                # For SC3, use [0] for org T temp, use [1] for 700m incresed elevation
 window_size = 30          # Rolling window for radiometer data noise reduction
 sw_k = 50                # Solar extinction coefficient (k) 
 
-ng_title = 'K = 50'           # Title for DTVPGE dataframe
-ng_switch = 0
+ng_title = 'K = 50 $m^{-1}$'           # Title for DTVPGE dataframe
+ng_switch = 1
 
 
 
-############################    Snow Parameters multi run Scenario 3   ############################ 
-ng_title_list = ['K = 50 $m^{-1}$', 'K = 100 $m^{-1}$', 'K = 230 $m^{-1}$', 'Warmer IC', 'Colder IC']           # Title for dtvpge dataframe
-sw_k_list = [50, 100, 230, 50, 50]                                                # Solar extinction coefficient (k)
-ic_scaling_list = [1, 1, 1, 0.7, 1.3]                                            # Scales IC 0.7 -30% scaling, 1.3 +30% scaling
-
-
+############################    Parameters multi runs   ############################ 
+if scenario == 3:
+    runs = 5                 # Number of model runs (spinup + main model) must be
+    ng_title_list = [ng_title,
+                     'K = 100 $m^{-1}$',
+                     'K = 30 $m^{-1}$',
+                     'Warmer IC',
+                     'Colder IC']           # Title for dtvpge dataframe
+    sw_k_list = [sw_k, 100, 30, 50, 50]                                   # Solar extinction coefficient (k)
+    ic_scaling_list = [ic_scaling, 1, 1, 0.7, 1.3]                  # Scales IC Warmer IC [0.7], Colder IC [1.3]
+    runtime = 24                                              # Hours (int)
+    skew_sw = 0                                               # For sc 3 or maybe only 4? I think only 4
+    
+if scenario == 4:
+    runs = 1                     # Number of model runs (spinup + main model) must be
+    runtime = 24*3            # Hours (int)
+    skew_sw = 1              # For sc 3 or maybe only 4? I think only 4
+    
+    
+        
 ############################    Constants   ############################ 
 
     # Snow properties  
@@ -122,10 +133,10 @@ if load_ic > 0:
     row = df1.iloc[:,0].values
     ic = np.array(row, dtype=float)
 
-#if scenario == 3:  #FIX should be able to run with the file?
-    # input_file = os.path.join(current_dir, 'DTVPGE_data.xlsx')
-    # print("File loaded:", input_file)
-    # df_ng = pd.read_excel(input_file, header=0)    
+if scenario == 3:
+    input_file = os.path.join(current_dir, 'DTVPGE_data.xlsx')
+    print("File loaded:", input_file)
+    df_ng = pd.read_excel(input_file, header=0)    
     
 if scenario  == 4:
     # Radiometer data
@@ -149,7 +160,7 @@ if scenario  == 4:
     end_filter = pd.to_datetime("2022.04.02" + " 00:00:00")
     df_rf = df_rf[df_rf["Date and time"].between(start_filter, end_filter)] # Selecting 1.april period
     df_rf = df_rf.reset_index(drop=True)    
-    #org df
+    # org df
     df_r = df_r[df_r["Date and time"].between(start_filter, end_filter)] # Selecting 1.april period
     df_r = df_r.reset_index(drop=True)    
  
@@ -192,10 +203,8 @@ if scenario  == 4:
         elif i == 'B':
             tinytag_B = np.array(df_tf.iloc[:,1].values, dtype=float)
             
-            
+    
     SW_scaled = SW_net * SW_scaling
-    
-    
 
 
 ###########################    Functions    ###########################
@@ -339,12 +348,6 @@ for run in range (1, runs + 1):
     
     #########################    Model domain    #########################
             
-    if scenario == 3 and runs > 1:
-        runtime = 24        # Hours (int)
-        print("runtime overwriten to", runtime)
-    if scenario == 4:
-        runtime = 24*3      # Hours (int)
-
         # Model grid  
     nx = int(depth/dx)
     ny = int((runtime * 60 * 60) / dt)
@@ -442,7 +445,7 @@ for run in range (1, runs + 1):
         
         
     
-    #####################     Main Model Loop    ##################### 
+    #####################     Main Model Calculations    ##################### 
     # Temperature
     
     if scenario == 4:
@@ -515,7 +518,15 @@ for run in range (1, runs + 1):
     
     # DTVPGE calculations
     dtvpge = np.where(vpg < -5, vpg + 5, np.where(vpg > 5, vpg - 5, 0))
-    dtvpge_mean = np.mean(dtvpge, axis = 1)
+   
+    if scenario == 4:
+        dtvpge_mean = np.mean(dtvpge[:,h*24:h*48], axis = 1)
+        SC4_dtvpge_mean = np.zeros([3,int(depth/dx)])
+        SC4_dtvpge_mean[0,:] = np.mean(dtvpge[:,h*0:h*24], axis = 1)
+        SC4_dtvpge_mean[1,:] = np.mean(dtvpge[:,h*24:h*48], axis = 1)
+        SC4_dtvpge_mean[2,:] = np.mean(dtvpge[:,h*48:h*72], axis = 1)
+    else:
+        dtvpge_mean = np.mean(dtvpge, axis = 1)
     
     if run == 1:
         dtvpge_abs = np.abs(dtvpge)
@@ -523,15 +534,18 @@ for run in range (1, runs + 1):
         
     
     
-    ############################    Data output   ############################ 
+    ############################    Data Output   ############################ 
     # Sensible heat calculation
     if scenario == 3:
-        SC3_sensible_heat = T_array[4,:]
-        SC3_LW_out = T_array[5,:]
-        SC3_srf_temp = temp[0,:]
-        SC3_10cm_temp = temp[20,:]
-        SC3_net_growth = net_growth
-        SC3_dtvpge_mean = dtvpge_mean
+        if run == 1:
+            SC3_sensible_heat = T_array[4,:]
+            SC3_LW_out = T_array[5,:]
+            SC3_srf_temp = temp[0,:]
+            SC3_10cm_temp = temp[20,:]
+            SC3_net_growth = net_growth
+            SC3_dtvpge_mean = dtvpge_mean
+        if run == 4:
+            SC3_dtvpge_mean_Warmer_IC = dtvpge_mean
     elif scenario == 4:
         sw_srf = SW_scaled*(1 - mt.exp(-sw_k*dx))
         sensible_heat = (((temp[0,:]-temp[1,:])/dx)*k) - sw_srf - LW_net
@@ -748,10 +762,10 @@ fig2, ax2 = plt.subplots(figsize=(9, 6))
 plt.subplots_adjust(bottom=0.3)  # Space for slider
 line2, = ax2.plot(y_hours, fgr[0, :], label = f'Depth: {x[0]}')
 
-ax2.set_title("Facet growth rate")
+ax2.set_title("DTVPGE")
 ax2.set_xlabel("Time [h]")
-ax2.set_ylabel("Facet growth rate [nm/s]")
-ax2.set_yticks(np.arange(-4, 4, 0.5))
+ax2.set_ylabel("DTVPGE [Pa/cm]")
+ax2.set_yticks(np.arange(-150, 200, 50))
 ax2.legend()
 ax2.grid(alpha=0.5)
 
@@ -768,7 +782,7 @@ button_down = Button(button_ax2_down, "↓ Deeper")
 
 def update_depth(val):
     depth_idx = int(depth_slider.val)
-    line2.set_ydata(fgr[depth_idx, :])  # Update y-data (FGR at selected depth)
+    line2.set_ydata(dtvpge[depth_idx, :])  # Update y-data (FGR at selected depth)
     ax2.legend([f'Depth: {x[depth_idx]:.1f} cm'], loc='upper right')  
     fig2.canvas.draw_idle()  # Redraw the figure. Might not need this
 
@@ -793,6 +807,7 @@ plt.show()
 
 # PAPER FIGURE SC3
 pld = int(plot_depth/dx)+1
+plt.rcParams.update({'font.size': 12})
 fig, ax = plt.subplots(1, 2, figsize=(12, 6), gridspec_kw={'width_ratios': [2, 1], 'wspace': 0.1})
 
 # Temperature plot
@@ -844,73 +859,92 @@ ax[1].text(0.93, 0.05, "b",
 #%%
 
 # PAPER FIGURE SC4
-xticks = np.arange(0,-18,-2)
-pld = int(plot_depth/dx)+1
-plt.rcParams.update({'font.size': 22})
-#fig, ax = plt.subplots(1, 2, figsize = (12, 6), gridspec_kw={'width_ratios': [2, 1]})
-fig, ax = plt.subplots(1, 2, figsize=(12, 6), gridspec_kw={'width_ratios': [2, 1], 'wspace': 0.1})
-#Temperature plot
-cmap = plt.get_cmap("tab20")  # Alternatives: "viridis", "plasma", "tab10", "tab20", "Set3"
-colors = [cmap(i / len(np.arange(h*24, h*48, h*pisp))) for i in range(len(np.arange(h*24, h*48, h*pisp)))]
+# To plot SC4, first run SC3 with cold_T = 0, then run SC4
 
+
+pld = int(plot_depth/dx)+1
+plt.rcParams.update({'font.size': 16})
+fig, ax = plt.subplots(1, 3, figsize=(18, 6), gridspec_kw={'width_ratios': [2, 1, 1], 'wspace': 0.1})
+
+#Temperature plot
+cmap = plt.get_cmap("turbo_r")
+colors = [cmap(i / 12) for i in range(12)]
+colors = colors[-5:] + colors [:-5]
 
 for i, p in enumerate(np.arange(h*24, h*48, h*pisp)):
     time_only = (base_time + timedelta(seconds=y_sec[p])).strftime("%H:%M")
     ax[0].plot(temp[:pld, p], x[:pld], label=time_only, color=colors[i], lw=2.7)
 
 ax[0].set_xlabel('Temperature [°C]')
-#ax[0].set_ylabel('Depth [cm]')
-ax[0].yaxis.tick_right()  # Move y-tick labels to the right
-ax[0].yaxis.set_label_position("right")  # Move y-axis label to the right
-ax[0].set_ylabel('Depth [cm]', rotation=270, labelpad=25)
+ax[0].yaxis.tick_left()
+ax[0].yaxis.set_label_position("left")
+ax[0].set_ylabel('Depth [cm]')
+# ax[0].set_ylabel('Depth [cm]', rotation=270, labelpad=25)
 ax[0].invert_yaxis()
-ax[0].legend()#fontsize=11)
+ax[0].legend()
 ax[0].grid(alpha=0.5)
-ax[0].set_xticks(xticks)
+ax[0].set_xticks(np.arange(0,-18,-2))
 ax[0].xaxis.set_label_position('top')
 ax[0].xaxis.tick_top()
 ax[0].text(0.96, 0.05, "a", 
-           #fontsize=15, 
-           #fontweight='bold', 
            transform=ax[0].transAxes,
            verticalalignment='top', 
            horizontalalignment='left', 
            bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
 
-#Net growth near surface
+# Mean DTVPGE near surface
 
-pld = int(plot_depth/dx)
 label = ['30.03.22', '31.03.22', '01.04.22']
 linestyle = ['-', '-', '-', '--', '--' ]
 colors = ['forestgreen', 'limegreen', 'lawngreen', 'black', 'C1' ]
-linewith = [6.5 ,6.5 ,6.5 ,2.4 ,2.4]
+linewidth = [6.5 ,6.5 ,6.5 ,2.4 ,2.4]
 for i in np.arange(0,5,1):
     if i == 3:
-        ax[1].plot(ng_hub['k=50'][:pld], x[:pld], label='SC3 k=50', linestyle=linestyle[i], color=colors[i], lw=linewith[i])
+        ax[1].plot(ng_hub['SC 3'][:pld], x_stag[:pld], label='SC3 K = 50 $m^{-1}$', linestyle=linestyle[i], color=colors[i], lw=linewidth[i])
     elif i == 4:
-        ax[1].plot(ng_hub['Warmer IC'][:pld], x[:pld], label='SC3 warmer IC', linestyle=linestyle[i], color=colors[i], lw=linewith[i])
+        ax[1].plot(SC3_dtvpge_mean_Warmer_IC[:pld], x_stag[:pld], label='SC3 Warmer IC', linestyle=linestyle[i], color=colors[i], lw=linewidth[i])
     else:
-        ax[1].plot(SC4_net_growth[i,:pld], x[:pld], label=label[i], linestyle=linestyle[i], color=colors[i], lw=linewith[i])
-  
-ax[1].legend()#fontsize=11)
-ax[1].set_xlabel("Net 'facetedness' [mm]")
-ax[1].set_xticks(np.arange(-0.2, 0.05, 0.05))
-#ax[1].set_ylabel('Depth [cm]')
-ax[1].set_yticklabels([])
+        ax[1].plot(SC4_dtvpge_mean[i,:pld], x_stag[:pld], label=label[i], linestyle=linestyle[i], color=colors[i], lw=linewidth[i])
+
+ax[1].legend()
+ax[1].set_xlabel("Mean DTVPGE [Pa/cm]")
 ax[1].invert_yaxis()
 ax[1].grid(alpha=0.5)
 ax[1].xaxis.set_label_position('top')
 ax[1].xaxis.tick_top()
-ax[1].text(0.91, 0.05, "b", 
-           #fontsize=15, 
-           #fontweight='bold', 
+ax[1].text(0.91, 0.05, "b",  
            transform=ax[1].transAxes,
+           verticalalignment='top', 
+           horizontalalignment='left', 
+           bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
+
+
+for i in np.arange(0,5,1):
+    if i == 3:
+        ax[2].plot(ng_hub['SC 3'][:pld], x_stag[:pld], label='SC3 K = 50 $m^{-1}$', linestyle=linestyle[i], color=colors[i], lw=linewidth[i])
+    elif i == 4:
+        ax[2].plot(SC3_dtvpge_mean_Warmer_IC[:pld], x_stag[:pld], label='SC3 Warmer IC', linestyle=linestyle[i], color=colors[i], lw=linewidth[i])
+    else:
+        ax[2].plot(SC4_dtvpge_mean[i,:pld], x_stag[:pld], label=label[i], linestyle=linestyle[i], color=colors[i], lw=linewidth[i])
+
+ax[2].set_xlabel("Mean DTVPGE [Pa/cm]")
+ax[2].set_xlim(-5, 2.5)
+ax[2].legend(loc='lower left')
+ax[2].yaxis.tick_right() 
+ax[2].set_ylabel('Depth [cm]')
+ax[2].yaxis.set_label_position("right")
+ax[2].invert_yaxis()
+ax[2].grid(alpha=0.5)
+ax[2].xaxis.set_label_position('top')
+ax[2].xaxis.tick_top()
+ax[2].text(0.915, 0.05, "c",  
+           transform=ax[2].transAxes,
            verticalalignment='top', 
            horizontalalignment='left', 
            bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
 #%%
 #Spin up temp profiles
-#fig, ax = plt.subplots(figsize = (9, 6))
+fig, ax = plt.subplots(figsize = (9, 6))
 
 #if spin_up_has_occurred == 1:
 
@@ -920,17 +954,20 @@ ax[1].text(0.91, 0.05, "b",
 #     ax.plot(temp[:, p], x, label= f"{sp_y[p]/3600} Hours")
 #ax.plot(temp[:, 0], x, label= f"{y[p]/3600} Hours", color='C1')
 
-# ax.plot(sp_y[:2880*3], sp_temp[0, 2880*25:2880*28], label= 'SPIN UP', color='C1')
-# ax.plot(sp_y[:2880*3], temp[0,:-1], label= 'srf temp', color='C2')
-# ax.set_title('Temperature profiles spin-up')
-# ax.set_xlabel('Temperature °C')
-# ax.set_ylabel('Depth [cm]')
-# ax.invert_yaxis()
-# ax.legend(fontsize=8)
-# ax.grid(alpha=0.5)
+ax.plot(sp_y[:2880*3], sp_temp[0, 2880*25:2880*28], label= 'SPIN UP', color='C1')
+ax.plot(sp_y[:2880*3], temp[0,:-1], label= 'srf temp', color='C2')
+ax.set_title('Temperature profiles spin-up')
+ax.set_xlabel('Temperature °C')
+ax.set_ylabel('Depth [cm]')
+ax.invert_yaxis()
+ax.legend(fontsize=8)
+ax.grid(alpha=0.5)
+ax.set_xticks(xticks)
 
-
+#%%
 # FIGURE 7
+
+
 plt.figure(figsize=(9, 6))
 #plt.rcParams.update({'font.size': 22})
 plt.plot(y_hours, dtvpge[0,:], label='0 - 5 mm', lw=2)
