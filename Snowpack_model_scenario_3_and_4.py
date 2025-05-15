@@ -1,9 +1,9 @@
 ### 1D Snowpack Temperature SimOlaThor ###
-# v3.7 Scenario 3 and 4 
+# v3.8 Scenario 3 and 4 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
-#   - Merged Ola's work on figure 7 and Thor's work on scenario 4
-#   - SC4 can now be plotted fully
+# - Small work on plotting sc3 and 4
+# - Should have spinup more than 20 days
 
 
 # Comment: 
@@ -34,8 +34,8 @@ b_bc = 0                   # Bottom boundary condition, fixed [°C]
 pisp = 2                   # Plot interval spacer [hours] (int)
 plot_depth = 0.35          # Depth shown in plots measured from surface [m]
 
-spin_up = 1             # [0] No spin-up, [1] Run spin-up
-sp_runtime = 24*14        # Spin-up run time [Hours]
+spin_up = 1               # [0] No spin-up, [1] Run spin-up
+sp_runtime = 24*21        # Spin-up run time [Hours]
 sp_pisp = 24              # Spin-up Plot interval spacer [hours] (int)
 
 load_ic = 0               # Load IC from file [0] No, [1] Yes
@@ -858,12 +858,94 @@ ax[1].text(0.93, 0.05, "b",
 
 #%%
 
+# Alternate figures for Scenario 3. Fig 5A6. c plot with zoomed in dtvpge including mean of absolute
+plt.rcParams.update({'font.size': 22}) # FIX THIS HAS TO CHANGE
+pld = int(plot_depth/dx)+1
+fig, ax = plt.subplots(1, 3, figsize=(18, 6), gridspec_kw={'width_ratios': [2, 1, 1], 'wspace': 0.1})
+
+# Temperature plot
+cmap = plt.get_cmap("turbo_r")
+colors = [cmap(i / 12) for i in range(12)]
+colors = colors[-5:] + colors [:-5]
+
+
+for i, p in enumerate(np.arange(0, h*24, h*pisp)):
+    time_only = (base_time + timedelta(seconds=y_sec[p])).strftime("%H:%M")
+    ax[0].plot(temp_plot_SC3[:pld, p], x[:pld], label=time_only, color=colors[i], lw=2.7)
+
+ax[0].set_xlabel('Temperature [°C]')
+ax[0].yaxis.tick_left()
+ax[0].set_ylabel('Depth [cm]')
+ax[0].yaxis.set_label_position("left")
+# ax[0].set_ylabel('Depth [cm]', rotation=270, labelpad=25)
+ax[0].invert_yaxis()
+ax[0].legend()
+ax[0].grid(alpha=0.5)
+ax[0].set_xticks(np.arange(0,-22,-2))
+ax[0].xaxis.set_label_position('top')
+ax[0].xaxis.tick_top()
+ax[0].text(0.958, 0.05, "a",  
+           transform=ax[0].transAxes,
+           verticalalignment='top', 
+           horizontalalignment='left', 
+           bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
+
+# Mean DTVPGE near surface
+linestyle = ['dotted', '-', '--', '-.', '-', '-' ]
+colors = ['C3', 'black', 'darkgrey', 'darkgrey','C1', 'C9' ]
+linewidth = [4, 4.2, 2.7, 2.7, 2.7, 2.7, 2.7]
+for i, column in enumerate(ng_hub.columns):
+    ax[1].plot(ng_hub[column][:pld], x_stag[:pld], label=column, linestyle=linestyle[i], color=colors[i], lw=linewidth[i])
+
+ax[1].plot(-1 * dtvpge_abs_mean[:pld], x_stag[:pld], label = 'Mean of absolute', linestyle = 'dotted', color = 'black', lw = 4)
+ax[1].legend(loc = 'lower left')
+ax[1].set_xlabel("Mean DTVPGE [Pa/cm]")
+# ax[1].set_xticks(np.arange(-0.2, 0.06, 0.05))
+ax[1].invert_yaxis()
+ax[1].grid(alpha=0.5)
+ax[1].xaxis.set_label_position('top')
+ax[1].xaxis.tick_top()
+ax[1].text(0.915, 0.05, "b",  
+           transform=ax[1].transAxes,
+           verticalalignment='top', 
+           horizontalalignment='left', 
+           bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
+
+for i, column in enumerate(ng_hub.columns):
+    ax[2].plot(ng_hub[column][:pld], x_stag[:pld], label=column, linestyle=linestyle[i], color=colors[i], lw=linewidth[i])
+    
+ax[2].plot(-1 * dtvpge_abs_mean[:pld], x_stag[:pld], label = 'DTVPGE abs mean', linestyle = 'dotted', color = 'black', lw = 4)
+# ax[2].plot(ng_hub['K = 30 $m^{-1}$'][:pld], x_stag[:pld], lw = 2.7, color = 'darkgrey', linestyle = '-.', label = 'K = 30 $m^{-1}$')
+# ax[2].plot(ng_hub['K = 50 $m^{-1}$'][0:pld], x_stag[:pld], color = 'black', lw = 2.7, label = 'K = 50 $m^{-1}$')
+# ax[2].plot(dtvpge_mean_1[:pld], x_stag[:pld], lw = 2.7, label = '1')
+# ax[2].plot(dtvpge_mean_3[:pld], x_stag[:pld], lw = 2.7, label = '3')
+# ax[2].plot(dtvpge_mean_14[:pld], x_stag[:pld], lw = 2.7, label = '14')
+# # ax[2].plot(dtvpge_mean_70[:pld], x_stag[:pld], lw = 2.7, label = '70')
+# ax[2].plot(dtvpge_mean_140[:pld], x_stag[:pld], lw = 2.7, label = '140')
+ax[2].set_xlabel("Mean DTVPGE [Pa/cm]")
+ax[2].set_xticks(np.arange(-4, 6, 2))
+ax[2].set_xlim(-5, 5)
+# ax[2].legend(loc='lower left')
+ax[2].yaxis.tick_right() 
+ax[2].set_ylabel('Depth [cm]')
+ax[2].yaxis.set_label_position("right")
+ax[2].invert_yaxis()
+ax[2].grid(alpha=0.5)
+ax[2].xaxis.set_label_position('top')
+ax[2].xaxis.tick_top()
+ax[2].text(0.915, 0.05, "c",  
+           transform=ax[2].transAxes,
+           verticalalignment='top', 
+           horizontalalignment='left', 
+           bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
+#%%
+
 # PAPER FIGURE SC4
-# To plot SC4, first run SC3 with cold_T = 0, then run SC4
+# To plot SC4, first run SC3 with cold_T = 0, then run SC4 
 
 
 pld = int(plot_depth/dx)+1
-plt.rcParams.update({'font.size': 16})
+plt.rcParams.update({'font.size': 22})
 fig, ax = plt.subplots(1, 3, figsize=(18, 6), gridspec_kw={'width_ratios': [2, 1, 1], 'wspace': 0.1})
 
 #Temperature plot
@@ -900,9 +982,9 @@ colors = ['forestgreen', 'limegreen', 'lawngreen', 'black', 'C1' ]
 linewidth = [6.5 ,6.5 ,6.5 ,2.4 ,2.4]
 for i in np.arange(0,5,1):
     if i == 3:
-        ax[1].plot(ng_hub['SC 3'][:pld], x_stag[:pld], label='SC3 K = 50 $m^{-1}$', linestyle=linestyle[i], color=colors[i], lw=linewidth[i])
+        ax[1].plot(ng_hub['SC 3'][:pld], x_stag[:pld], label='Scenario 3*', linestyle=linestyle[i], color=colors[i], lw=linewidth[i])
     elif i == 4:
-        ax[1].plot(SC3_dtvpge_mean_Warmer_IC[:pld], x_stag[:pld], label='SC3 Warmer IC', linestyle=linestyle[i], color=colors[i], lw=linewidth[i])
+        ax[1].plot(SC3_dtvpge_mean_Warmer_IC[:pld], x_stag[:pld], label='SC3* Warmer IC', linestyle=linestyle[i], color=colors[i], lw=linewidth[i])
     else:
         ax[1].plot(SC4_dtvpge_mean[i,:pld], x_stag[:pld], label=label[i], linestyle=linestyle[i], color=colors[i], lw=linewidth[i])
 
@@ -921,15 +1003,15 @@ ax[1].text(0.91, 0.05, "b",
 
 for i in np.arange(0,5,1):
     if i == 3:
-        ax[2].plot(ng_hub['SC 3'][:pld], x_stag[:pld], label='SC3 K = 50 $m^{-1}$', linestyle=linestyle[i], color=colors[i], lw=linewidth[i])
+        ax[2].plot(ng_hub['SC 3'][:pld], x_stag[:pld], label='Scenario 3*$', linestyle=linestyle[i], color=colors[i], lw=linewidth[i])
     elif i == 4:
-        ax[2].plot(SC3_dtvpge_mean_Warmer_IC[:pld], x_stag[:pld], label='SC3 Warmer IC', linestyle=linestyle[i], color=colors[i], lw=linewidth[i])
+        ax[2].plot(SC3_dtvpge_mean_Warmer_IC[:pld], x_stag[:pld], label='SC3* Warmer IC', linestyle=linestyle[i], color=colors[i], lw=linewidth[i])
     else:
         ax[2].plot(SC4_dtvpge_mean[i,:pld], x_stag[:pld], label=label[i], linestyle=linestyle[i], color=colors[i], lw=linewidth[i])
 
 ax[2].set_xlabel("Mean DTVPGE [Pa/cm]")
 ax[2].set_xlim(-5, 2.5)
-ax[2].legend(loc='lower left')
+# ax[2].legend(loc='lower left')
 ax[2].yaxis.tick_right() 
 ax[2].set_ylabel('Depth [cm]')
 ax[2].yaxis.set_label_position("right")
