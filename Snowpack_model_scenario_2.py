@@ -1,8 +1,7 @@
 ### 1D snowpack temperature simulator ###
-# v1.9 
+# v2.0 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
-#   - Shifted colors in temp plot
 #   - Fixed typos
  
     
@@ -205,7 +204,7 @@ for run in range (1, runs + 1):
             
             
             
-    # DTVPG calculations
+    # DTVPGE calculations
     dtvpge = np.where(vpg < -5, vpg + 5, np.where(vpg > 5, vpg - 5, 0))
     
     if run == 2:
@@ -293,7 +292,6 @@ plt.tight_layout()
 #   %matplotlib qt                # To be pasted in console before plotting
     
     
-xticks = np.arange(0,-20,-2) #FIX change x-scale by MAX-MIN insted of fixed values
 pld = int(plot_depth/dx) + 1
 time_steps = ny + 1
 
@@ -306,7 +304,7 @@ line1, = ax1.plot(temp[:pld, 0], x[:pld], label=f'Time: {y_t[0]}')
 ax1.set_title("Temperature Profile")
 ax1.set_xlabel("Temperature [°C]")
 ax1.set_ylabel("Depth [cm]")
-ax1.set_xticks(xticks)
+ax1.set_xticks(np.arange(0,-20,-2))
 ax1.invert_yaxis()
 ax1.legend()
 ax1.grid(alpha=0.5)
