@@ -1,5 +1,5 @@
 ### 1D Snowpack Temperature SimOlaThor ###
-# v3.8 Scenario 3 and 4 
+# v3.9 Scenario 3 and 4 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
 # - Small work on plotting sc3 and 4
@@ -26,7 +26,7 @@ import time
 start_time = time.time()
 
 ############################    Parameters   ############################ 
-scenario = 4                # Must be 3 or 4. Read paper for explanation, dummy.                  
+scenario = 3                # Must be 3 or 4. Read paper for explanation, dummy.                  
 dt = 30                    # Time step [seconds] (Must be a divisor of 3600) For Sc. 4 use 30s or 60s
 dx = 0.005                 # Dist. interval [m]
 depth = 1                  # Snow depth from surface [m]
@@ -44,7 +44,7 @@ data_to_file = 0          # Write radiation and atm temp data to new file (spin-
 ic_scaling = 1            # How warm or cold the IC should be. Warmer IC  [0.7], colder IC [1.3]
 
 
-cold_T = 0                # For SC3, use [0] for org T temp, use [1] for 700m incresed elevation
+cold_T = 1                # For SC3, use [0] for org T temp, use [1] for 700m incresed elevation
 window_size = 30          # Rolling window for radiometer data noise reduction
 sw_k = 50                # Solar extinction coefficient (k) 
 
@@ -55,15 +55,15 @@ ng_switch = 1
 
 ############################    Parameters multi runs   ############################ 
 if scenario == 3:
-    runs = 5                 # Number of model runs (spinup + main model) must be
+    runs = 1                 # Number of model runs (spinup + main model) must be
     ng_title_list = [ng_title,
-                     'K = 100 $m^{-1}$',
                      'K = 30 $m^{-1}$',
+                     'K = 100 $m^{-1}$',
                      'Warmer IC',
                      'Colder IC']           # Title for dtvpge dataframe
-    sw_k_list = [sw_k, 100, 30, 50, 50]                                   # Solar extinction coefficient (k)
+    sw_k_list = [sw_k, 30, 100, 50, 50]                                   # Solar extinction coefficient (k)
     ic_scaling_list = [ic_scaling, 1, 1, 0.7, 1.3]                  # Scales IC Warmer IC [0.7], Colder IC [1.3]
-    runtime = 24                                              # Hours (int)
+    runtime = 24*2                                              # Hours (int)
     skew_sw = 0                                               # For sc 3 or maybe only 4? I think only 4
     
 if scenario == 4:
@@ -1051,12 +1051,16 @@ ax.set_xticks(xticks)
 
 
 plt.figure(figsize=(9, 6))
-#plt.rcParams.update({'font.size': 22})
-plt.plot(y_hours, dtvpge[0,:], label='0 - 5 mm', lw=2)
-plt.plot(y_hours, dtvpge[3,:], label='15 - 20 mm', lw=2)
+plt.rcParams.update({'font.size': 14})
+plt.plot(y_hours, dtvpge[0,:], label='0 - 5 mm, Surface', lw=2)
+plt.plot(y_hours, dtvpge[3,:], label='15 - 20 mm, shows how fast dtvpge decreases', lw=2)
+# plt.plot(y_hours, dtvpge[4,:], label='20 - 25 mm, first depth positive dtvpge appears', lw=2)
 plt.plot(y_hours, dtvpge[5,:], label='25 - 30 mm', lw=2)
-plt.plot(y_hours, dtvpge[9,:], label='45 - 50 mm', lw=2)
-plt.plot(y_hours, dtvpge[29,:], label='145 - 150 mm', lw=2)
+plt.plot(y_hours, dtvpge[9,:], label='45 - 50 mm, first crossing of 0', lw=2)
+plt.plot(y_hours, dtvpge[14,:], label='70 - 75 mm, positive peak', lw=2)
+plt.plot(y_hours, dtvpge[24,:], label='120 - 125 mm, second crossing of 0', lw=2)
+plt.plot(y_hours, dtvpge[36,:], label='180 - 185 mm, lower negative peak', lw=2)
+# plt.plot(y_hours, dtvpge[59,:], label='295 - 300 mm, below here only 0', lw=2)
 plt.title('')
 plt.xlabel('Time [hours')
 plt.ylabel('DTVPGE')
@@ -1067,4 +1071,19 @@ plt.xticks([0,12,24,36,48])
 plt.tight_layout()
 plt.show()
 
+#%%
+plt.figure(figsize = (9,6))
+plt.imshow(dtvpge, #vmin = -25, vmax = 25,
+           cmap = 'RdYlGn_r', aspect='auto')
+plt.colorbar(label = 'Pa/cm')
+plt.title('DTVPGE', size = '16')
+plt.xlabel('Time')
+plt.ylabel('Depth')
 
+#%%
+plt.figure(figsize = (9,6))
+plt.imshow(temp, cmap = 'RdBu_r', aspect='auto')
+plt.colorbar(label = '°C')
+plt.title('Temp', size = '16')
+plt.xlabel('Time')
+plt.ylabel('Depth')
