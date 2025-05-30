@@ -187,6 +187,60 @@
 #################### SC3  ####################
 #%%
 
+# PAPER FIGURE SC3 before review
+pld = int(plot_depth/dx)+1
+plt.rcParams.update({'font.size': 22})
+fig, ax = plt.subplots(1, 2, figsize=(12, 6), gridspec_kw={'width_ratios': [2, 1], 'wspace': 0.13, 'left': 0.05, 'right': 0.95})
+
+# Temperature plot
+cmap = plt.get_cmap("turbo_r")
+colors = [cmap(i / 12) for i in range(12)]
+colors = colors[-5:] + colors [:-5]
+
+
+for i, p in enumerate(np.arange(0, h*24, h*pisp)):
+    time_only = (base_time + timedelta(seconds=y_sec[p])).strftime("%H:%M")
+    ax[0].plot(temp_plot_SC3[:pld, p], x[:pld], label=time_only, color=colors[i], lw=2.7)
+
+ax[0].set_xlabel('Temperature [°C]')
+ax[0].yaxis.tick_right() 
+ax[0].yaxis.set_label_position("right")  
+ax[0].set_ylabel('Depth [cm]', rotation=270, labelpad=25)
+ax[0].invert_yaxis()
+ax[0].legend()
+ax[0].grid(alpha=0.5)
+ax[0].set_xticks(np.arange(0,-22,-2))
+ax[0].xaxis.set_label_position('top')
+ax[0].xaxis.tick_top()
+ax[0].text(0.968, 0.065, "a",  
+           transform=ax[0].transAxes,
+           verticalalignment='top', 
+           horizontalalignment='left', 
+           bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
+
+# Mean DTVPGE near surface
+linestyle = ['dotted', '-', '--', '-.', '-', '-' ]
+colors = ['C3', 'black', 'darkgrey', 'darkgrey','C1', 'C9' ]
+linewidth = [4,4.2,2.7 ,2.7 ,2.7 ,2.7 ,2.7]
+for i, column in enumerate(ng_hub.columns):
+    ax[1].plot(ng_hub[column][:pld], x_stag[:pld], label=column, linestyle=linestyle[i], color=colors[i], lw=linewidth[i])
+  
+ax[1].legend()
+ax[1].set_xlabel("Mean DTVPGE [Pa/cm]")
+ax[1].set_yticklabels([])
+ax[1].invert_yaxis()
+ax[1].grid(alpha=0.5)
+ax[1].xaxis.set_label_position('top')
+ax[1].xaxis.tick_top()
+ax[1].text(0.93, 0.065, "b",  
+           transform=ax[1].transAxes,
+           verticalalignment='top', 
+           horizontalalignment='left', 
+           bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
+
+
+#%%
+
 # Alternate figures for Scenario 3. Fig 5A1.
 pld = int(plot_depth/dx)+1
 fig, ax = plt.subplots(1, 3, figsize=(18, 6), gridspec_kw={'width_ratios': [2, 1, 1], 'wspace': 0.1})
