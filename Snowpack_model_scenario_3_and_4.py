@@ -1,13 +1,14 @@
 ### 1D Snowpack Temperature SimOlaThor ###
-# v3.9 Scenario 3 and 4 
+# v4.0 Scenario 3 and 4 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
-# - Small work on plotting sc3 and 4
-# - Should have spinup more than 20 days
+# - Adjusting figures
+# - Changing legend order
+# - Fixing fig 6
 
 
 # Comment: 
-#   - Instenses to looked at marked with "FIX"
+#   - Instances to looked at marked with "FIX"
 
 #Storagee of latent heat
 
@@ -60,7 +61,7 @@ if scenario == 3:
                      'K = 30 $m^{-1}$',
                      'K = 100 $m^{-1}$',
                      'Warmer IC',
-                     'Colder IC']           # Title for dtvpge dataframe
+                     'Colder IC']           # Titles for dtvpge dataframe
     sw_k_list = [sw_k, 30, 100, 50, 50]                                   # Solar extinction coefficient (k)
     ic_scaling_list = [ic_scaling, 1, 1, 0.7, 1.3]                  # Scales IC Warmer IC [0.7], Colder IC [1.3]
     runtime = 24*2                                              # Hours (int)
@@ -733,7 +734,7 @@ pld = int(plot_depth/dx)
 # Temp slider
 fig1, ax1 = plt.subplots(figsize=(9, 6))
 plt.subplots_adjust(bottom=0.2)  # Space for slider
-line1, = ax1.plot(temp[:pld, 0], x[:pld], label=f'Time: {y_t[0]}')
+line1, = ax1.plot(temp_plot_SC3[:pld, 0], x[:pld], label=f'Time: {y_t[0]}')
 
 ax1.set_title("Temperature Profile")
 ax1.set_xlabel("Temperature [°C]")
@@ -803,65 +804,15 @@ button_up.on_clicked(go_higher)
 plt.show()
 
 
+
 #%%
 
 # PAPER FIGURE SC3
-pld = int(plot_depth/dx)+1
-plt.rcParams.update({'font.size': 12})
-fig, ax = plt.subplots(1, 2, figsize=(12, 6), gridspec_kw={'width_ratios': [2, 1], 'wspace': 0.1})
+# To plot Sc3, first run Sc2, then run Sc3 with cold_T = 1
 
-# Temperature plot
-cmap = plt.get_cmap("turbo_r")
-colors = [cmap(i / 12) for i in range(12)]
-colors = colors[-5:] + colors [:-5]
-
-
-for i, p in enumerate(np.arange(0, h*24, h*pisp)):
-    time_only = (base_time + timedelta(seconds=y_sec[p])).strftime("%H:%M")
-    ax[0].plot(temp_plot_SC3[:pld, p], x[:pld], label=time_only, color=colors[i], lw=2.7)
-
-ax[0].set_xlabel('Temperature [°C]')
-ax[0].yaxis.tick_right() 
-ax[0].yaxis.set_label_position("right")  
-ax[0].set_ylabel('Depth [cm]', rotation=270, labelpad=25)
-ax[0].invert_yaxis()
-ax[0].legend()
-ax[0].grid(alpha=0.5)
-ax[0].set_xticks(np.arange(0,-22,-2))
-ax[0].xaxis.set_label_position('top')
-ax[0].xaxis.tick_top()
-ax[0].text(0.968, 0.05, "a",  
-           transform=ax[0].transAxes,
-           verticalalignment='top', 
-           horizontalalignment='left', 
-           bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
-
-# Mean DTVPGE near surface
-linestyle = ['dotted', '-', '--', '-.', '-', '-' ]
-colors = ['C3', 'black', 'darkgrey', 'darkgrey','C1', 'C9' ]
-linewidth = [4,4.2,2.7 ,2.7 ,2.7 ,2.7 ,2.7]
-for i, column in enumerate(ng_hub.columns):
-    ax[1].plot(ng_hub[column][:pld], x_stag[:pld], label=column, linestyle=linestyle[i], color=colors[i], lw=linewidth[i])
-  
-ax[1].legend()
-ax[1].set_xlabel("Mean DTVPGE [Pa/cm]")
-ax[1].set_yticklabels([])
-ax[1].invert_yaxis()
-ax[1].grid(alpha=0.5)
-ax[1].xaxis.set_label_position('top')
-ax[1].xaxis.tick_top()
-ax[1].text(0.93, 0.05, "b",  
-           transform=ax[1].transAxes,
-           verticalalignment='top', 
-           horizontalalignment='left', 
-           bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
-
-#%%
-
-# Alternate figures for Scenario 3. Fig 5A6. c plot with zoomed in dtvpge including mean of absolute
 plt.rcParams.update({'font.size': 22}) # FIX THIS HAS TO CHANGE
 pld = int(plot_depth/dx)+1
-fig, ax = plt.subplots(1, 3, figsize=(18, 6), gridspec_kw={'width_ratios': [2, 1, 1], 'wspace': 0.1})
+fig, ax = plt.subplots(1, 3, figsize=(18, 6), gridspec_kw={'width_ratios': [2, 1, 1], 'wspace': 0.04, 'left': 0.05, 'right': 0.95})
 
 # Temperature plot
 cmap = plt.get_cmap("turbo_r")
@@ -884,7 +835,7 @@ ax[0].grid(alpha=0.5)
 ax[0].set_xticks(np.arange(0,-22,-2))
 ax[0].xaxis.set_label_position('top')
 ax[0].xaxis.tick_top()
-ax[0].text(0.958, 0.05, "a",  
+ax[0].text(0.954, 0.065, "a",  
            transform=ax[0].transAxes,
            verticalalignment='top', 
            horizontalalignment='left', 
@@ -894,18 +845,33 @@ ax[0].text(0.958, 0.05, "a",
 linestyle = ['dotted', '-', '--', '-.', '-', '-' ]
 colors = ['C3', 'black', 'darkgrey', 'darkgrey','C1', 'C9' ]
 linewidth = [4, 4.2, 2.7, 2.7, 2.7, 2.7, 2.7]
+linehandles = []
 for i, column in enumerate(ng_hub.columns):
-    ax[1].plot(ng_hub[column][:pld], x_stag[:pld], label=column, linestyle=linestyle[i], color=colors[i], lw=linewidth[i])
+    line, =ax[1].plot(ng_hub[column][:pld], x_stag[:pld], label=column, linestyle=linestyle[i], color=colors[i], lw=linewidth[i])
+    linehandles.append(line)
+   
+new_order = [1, 2, 3, 4, 5, 0]
+ordered_handles = [linehandles[i] for i in new_order]
+ordered_labels = [ng_hub.columns[i] for i in new_order]   
 
-ax[1].plot(-1 * dtvpge_abs_mean[:pld], x_stag[:pld], label = 'Mean of absolute', linestyle = 'dotted', color = 'black', lw = 4)
-ax[1].legend(loc = 'lower left')
+line2, =ax[1].plot(-1 * dtvpge_abs_mean[:pld], x_stag[:pld], label = 'Absolute', linestyle = 'dotted', color = 'black', lw = 4)
+
+ordered_handles.append(line2)
+ordered_labels.append('Absolute')   # |K = 50 $m^{-1}$|
+# new_order = [0, 6, 1, 2, 3, 4, 5]
+# ordered_handles = [ordered_handles[i] for i in new_order]
+# ordered_labels = [ordered_labels[i] for i in new_order]
+ax[1].legend(ordered_handles, ordered_labels)                 # Fiddling with legend orders like a fool. This can be done more elegantly.
+
+ax[1].plot(ng_hub['K = 50 $m^{-1}$'][:pld], x_stag[:pld], linestyle = '-', color = 'black', lw = 4.2)       # Putting this line on top
+# ax[1].legend(loc = 'lower left')
 ax[1].set_xlabel("Mean DTVPGE [Pa/cm]")
-# ax[1].set_xticks(np.arange(-0.2, 0.06, 0.05))
 ax[1].invert_yaxis()
+ax[1].set_yticklabels([])
 ax[1].grid(alpha=0.5)
 ax[1].xaxis.set_label_position('top')
 ax[1].xaxis.tick_top()
-ax[1].text(0.915, 0.05, "b",  
+ax[1].text(0.906, 0.065, "b",  
            transform=ax[1].transAxes,
            verticalalignment='top', 
            horizontalalignment='left', 
@@ -915,13 +881,7 @@ for i, column in enumerate(ng_hub.columns):
     ax[2].plot(ng_hub[column][:pld], x_stag[:pld], label=column, linestyle=linestyle[i], color=colors[i], lw=linewidth[i])
     
 ax[2].plot(-1 * dtvpge_abs_mean[:pld], x_stag[:pld], label = 'DTVPGE abs mean', linestyle = 'dotted', color = 'black', lw = 4)
-# ax[2].plot(ng_hub['K = 30 $m^{-1}$'][:pld], x_stag[:pld], lw = 2.7, color = 'darkgrey', linestyle = '-.', label = 'K = 30 $m^{-1}$')
-# ax[2].plot(ng_hub['K = 50 $m^{-1}$'][0:pld], x_stag[:pld], color = 'black', lw = 2.7, label = 'K = 50 $m^{-1}$')
-# ax[2].plot(dtvpge_mean_1[:pld], x_stag[:pld], lw = 2.7, label = '1')
-# ax[2].plot(dtvpge_mean_3[:pld], x_stag[:pld], lw = 2.7, label = '3')
-# ax[2].plot(dtvpge_mean_14[:pld], x_stag[:pld], lw = 2.7, label = '14')
-# # ax[2].plot(dtvpge_mean_70[:pld], x_stag[:pld], lw = 2.7, label = '70')
-# ax[2].plot(dtvpge_mean_140[:pld], x_stag[:pld], lw = 2.7, label = '140')
+ax[2].plot(ng_hub['K = 50 $m^{-1}$'][:pld], x_stag[:pld], linestyle = '-', color = 'black', lw = 4.2)        # Putting K = 50 on top. Can't be bothered with zorder
 ax[2].set_xlabel("Mean DTVPGE [Pa/cm]")
 ax[2].set_xticks(np.arange(-4, 6, 2))
 ax[2].set_xlim(-5, 5)
@@ -933,11 +893,13 @@ ax[2].invert_yaxis()
 ax[2].grid(alpha=0.5)
 ax[2].xaxis.set_label_position('top')
 ax[2].xaxis.tick_top()
-ax[2].text(0.915, 0.05, "c",  
+ax[2].text(0.914, 0.065, "c",  
            transform=ax[2].transAxes,
            verticalalignment='top', 
            horizontalalignment='left', 
            bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
+
+# plt.savefig('Fig 5.png', dpi = 900)
 #%%
 
 # PAPER FIGURE SC4
@@ -1047,30 +1009,35 @@ ax.grid(alpha=0.5)
 ax.set_xticks(xticks)
 
 #%%
-# FIGURE 7
+# FIGURE 6
+
+cmap = plt.get_cmap("turbo")
+colors = [cmap(i / 5) for i in range(5)]
+colors = colors[-4:] + colors [:-4]
 
 
 plt.figure(figsize=(9, 6))
-plt.rcParams.update({'font.size': 14})
-plt.plot(y_hours, dtvpge[0,:], label='0 - 5 mm, Surface', lw=2)
-plt.plot(y_hours, dtvpge[3,:], label='15 - 20 mm, shows how fast dtvpge decreases', lw=2)
+plt.rcParams.update({'font.size': 22})
+plt.plot(y_hours, dtvpge[0,:], label='0 - 0.5 cm', lw=2.5)#, color = colors[0])            # , Surface
+plt.plot(y_hours, dtvpge[3,:], label='1.5 - 2 cm', lw=2.5)#, color = colors[1])            #, shows how fast dtvpge decreases
 # plt.plot(y_hours, dtvpge[4,:], label='20 - 25 mm, first depth positive dtvpge appears', lw=2)
-plt.plot(y_hours, dtvpge[5,:], label='25 - 30 mm', lw=2)
-plt.plot(y_hours, dtvpge[9,:], label='45 - 50 mm, first crossing of 0', lw=2)
-plt.plot(y_hours, dtvpge[14,:], label='70 - 75 mm, positive peak', lw=2)
-plt.plot(y_hours, dtvpge[24,:], label='120 - 125 mm, second crossing of 0', lw=2)
-plt.plot(y_hours, dtvpge[36,:], label='180 - 185 mm, lower negative peak', lw=2)
+# plt.plot(y_hours, dtvpge[5,:], label='25 - 30 mm', lw=2)
+plt.plot(y_hours, dtvpge[9,:], label='4.5 - 5 cm', lw=2.5)#, color = colors[2])                         #  , first crossing of 0'
+plt.plot(y_hours, dtvpge[14,:], label='7 - 7.5 cm', lw=2.5)#, color = colors[3])                       # , positive peak
+# plt.plot(y_hours, dtvpge[24,:], label='120 - 125 mm, second crossing of 0', lw=2)
+plt.plot(y_hours, dtvpge[36,:], label='18 - 18.5 cm', lw=2.5)#, color = colors[4])                  #, lower negative peak
 # plt.plot(y_hours, dtvpge[59,:], label='295 - 300 mm, below here only 0', lw=2)
 plt.title('')
 plt.xlabel('Time [hours')
-plt.ylabel('DTVPGE')
+plt.ylabel('DTVPGE [Pa/cm]')
 plt.xlabel('Time [hours]')
 plt.legend(loc="lower left")
 plt.grid(True, alpha=0.5)
-plt.xticks([0,12,24,36,48])
+plt.xticks([0,6,12,18,24,30,36,42,48])
 plt.tight_layout()
 plt.show()
 
+# plt.savefig('Fig 6A1.png', dpi = 900)
 #%%
 plt.figure(figsize = (9,6))
 plt.imshow(dtvpge, #vmin = -25, vmax = 25,
