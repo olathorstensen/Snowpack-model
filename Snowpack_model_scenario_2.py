@@ -1,8 +1,10 @@
 ### 1D snowpack temperature simulator ###
-# v2.0 
+# v2.1 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
-#   - Fixed typos
+#   - Plot depth 0.35
+#   - Changed zorder
+#   - Plotting temp from run 1
  
     
 import numpy as np
@@ -23,8 +25,8 @@ dx = 0.005               # Dist. interval [m]
 pisp = 2                 # USE INTEGERS. Give hourly plot rate
 b_bc = 0                 # Bottom boundary condition, fixed [°C]
 spin_up = 1              # [0] No spin-up, [1] Run spin-up
-sp_runtime = 24*14        # Spin-up run time [Hours]
-plot_depth = 0.40        # Depth shown in plots [m]
+sp_runtime = 24*21        # Spin-up run time [Hours]
+plot_depth = 0.35        # Depth shown in plots [m]
 ng_to_file = 1           # Writes net_growth to file
 
 
@@ -211,6 +213,7 @@ for run in range (1, runs + 1):
         dtvpge_mean_cold_bc = np.mean(dtvpge, axis = 1)
     else:
         dtvpge_mean = np.mean(dtvpge, axis = 1)
+        SC2_temp = temp
         
  
 
@@ -238,12 +241,12 @@ print(f"Simulation complete. Runtime: {(end_time-start_time):.2f} seconds")
 
 #%%
 ### Figure for the paper
-plt.rcParams.update({'font.size': 24})
+plt.rcParams.update({'font.size': 22})
 pld = int(plot_depth/dx) + 1
 time_steps = ny + 1
 
 
-fig3, ax3 = plt.subplots(1, 2, figsize=(12, 6), gridspec_kw={'width_ratios': [2, 1], 'wspace': 0.1})
+fig3, ax3 = plt.subplots(1, 2, figsize=(12, 6), gridspec_kw={'width_ratios': [2, 1], 'wspace': 0.13})
 
 # Temperature plot
 cmap = plt.get_cmap("turbo_r")  # Alternatives: "viridis", "plasma", "tab10", "tab20", "Set3"
@@ -252,40 +255,41 @@ colors = colors[-5:] + colors [:-5] # Change to 5?
 
 for i, p in enumerate(np.arange(0, ny, h*pisp)):
     time_only = (base_time + timedelta(seconds=y_sec[p])).strftime("%H:%M")
-    ax3[0].plot(temp[:pld, p], x[:pld], label=f'{time_only}', color=colors[i], lw=2.5)
+    ax3[0].plot(SC2_temp[:pld, p], x[:pld], label=f'{time_only}', color=colors[i], lw=2.5)
 ax3[0].set_xlabel('Temperature [°C]')
 ax3[0].set_ylabel('Depth [cm]')
 ax3[0].yaxis.tick_right() 
 ax3[0].yaxis.set_label_position("right")  
-ax3[0].set_ylabel('Depth [cm]', rotation=270, labelpad=25)
+ax3[0].set_ylabel('Depth [cm]', rotation=270, labelpad=23)
 ax3[0].invert_yaxis()
 ax3[0].legend()
 ax3[0].grid(alpha=0.5)
 ax3[0].set_xticks(np.arange(0,-22,-2))
 ax3[0].xaxis.set_label_position('top')
 ax3[0].xaxis.tick_top()  
-ax3[0].text(0.968, 0.05, "a",  
+ax3[0].text(0.959, 0.065, "a",  
            transform=ax3[0].transAxes,
            verticalalignment='top', 
            horizontalalignment='left', 
            bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
 
 # DTVPGE near surface
-ax3[1].plot(dtvpge_mean[:pld], x_stag[0:(pld)],linestyle='dotted', color='C3', lw=5, label=' Lower BC = 0°C')
-ax3[1].plot(dtvpge_mean_cold_bc[:pld], x_stag[0:(pld)],linestyle= '--', color='C0', lw=2.7, label='Lower BC = -10°C')
+ax3[1].plot(dtvpge_mean[:pld], x_stag[0:(pld)],linestyle='dotted', color='C3', lw=5, label=' Lower BC = 0°C', zorder = 2)
+ax3[1].plot(dtvpge_mean_cold_bc[:pld], x_stag[0:(pld)],linestyle= '--', color='C0', lw=2.7, label='Lower BC = -10°C', zorder = 1)
 ax3[1].set_xlabel("Mean DTVPGE [Pa/cm]")
-ax3[1].legend(loc='lower right', bbox_to_anchor=(0.9, 0))
+ax3[1].legend(loc='lower right', bbox_to_anchor=(1.02, 0.065))
 ax3[1].set_yticklabels([])
 ax3[1].invert_yaxis()
 ax3[1].grid(alpha=0.5)
 ax3[1].xaxis.set_label_position('top')
 ax3[1].xaxis.tick_top()
-ax3[1].text(0.935, 0.05, "b", 
+ax3[1].text(0.919, 0.065, "b", 
             transform=ax3[1].transAxes,
             verticalalignment='top', 
             horizontalalignment='left', 
             bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
-plt.tight_layout()
+plt.show()
+# plt.savefig('Fig 4.png', dpi = 900)
 
 #%%
 # Plot of results:
