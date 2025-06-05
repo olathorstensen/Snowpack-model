@@ -1,10 +1,9 @@
 ### 1D Snowpack Temperature SimOlaThor ###
-# v4.0 Scenario 3 and 4 
+# v4.1 Scenario 3 and 4 
 #@author: Ola Thorstensen and Thor Parmentier
 # Version update:
-# - Adjusting figures
-# - Changing legend order
-# - Fixing fig 6
+# - Adjusting figures again
+
 
 
 # Comment: 
@@ -857,10 +856,10 @@ ordered_labels = [ng_hub.columns[i] for i in new_order]
 line2, =ax[1].plot(-1 * dtvpge_abs_mean[:pld], x_stag[:pld], label = 'Absolute', linestyle = 'dotted', color = 'black', lw = 4)
 
 ordered_handles.append(line2)
-ordered_labels.append('Absolute')   # |K = 50 $m^{-1}$|
-# new_order = [0, 6, 1, 2, 3, 4, 5]
-# ordered_handles = [ordered_handles[i] for i in new_order]
-# ordered_labels = [ordered_labels[i] for i in new_order]
+ordered_labels.append('|K = 50 $m^{-1}$|')   # |K = 50 $m^{-1}$|
+new_order = [0, 6, 1, 2, 3, 4, 5]
+ordered_handles = [ordered_handles[i] for i in new_order]
+ordered_labels = [ordered_labels[i] for i in new_order]
 ax[1].legend(ordered_handles, ordered_labels)                 # Fiddling with legend orders like a fool. This can be done more elegantly.
 
 ax[1].plot(ng_hub['K = 50 $m^{-1}$'][:pld], x_stag[:pld], linestyle = '-', color = 'black', lw = 4.2)       # Putting this line on top
@@ -908,7 +907,7 @@ ax[2].text(0.914, 0.065, "c",
 
 pld = int(plot_depth/dx)+1
 plt.rcParams.update({'font.size': 22})
-fig, ax = plt.subplots(1, 3, figsize=(18, 6), gridspec_kw={'width_ratios': [2, 1, 1], 'wspace': 0.1})
+fig, ax = plt.subplots(1, 3, figsize=(18, 6), gridspec_kw={'width_ratios': [2, 1, 1], 'wspace': 0.04, 'left': 0.05, 'right': 0.95})
 
 #Temperature plot
 cmap = plt.get_cmap("turbo_r")
@@ -930,7 +929,7 @@ ax[0].grid(alpha=0.5)
 ax[0].set_xticks(np.arange(0,-18,-2))
 ax[0].xaxis.set_label_position('top')
 ax[0].xaxis.tick_top()
-ax[0].text(0.96, 0.05, "a", 
+ax[0].text(0.954, 0.065, "a", 
            transform=ax[0].transAxes,
            verticalalignment='top', 
            horizontalalignment='left', 
@@ -940,8 +939,8 @@ ax[0].text(0.96, 0.05, "a",
 
 label = ['30.03.22', '31.03.22', '01.04.22']
 linestyle = ['-', '-', '-', '--', '--' ]
-colors = ['forestgreen', 'limegreen', 'lawngreen', 'black', 'C1' ]
-linewidth = [6.5 ,6.5 ,6.5 ,2.4 ,2.4]
+colors = ['deepskyblue', 'cyan', 'mediumblue', 'black', 'C1' ]
+linewidth = [4.2 , 4.2 , 4.2 ,2.7 ,2.7]
 for i in np.arange(0,5,1):
     if i == 3:
         ax[1].plot(ng_hub['SC 3'][:pld], x_stag[:pld], label='Scenario 3*', linestyle=linestyle[i], color=colors[i], lw=linewidth[i])
@@ -950,13 +949,14 @@ for i in np.arange(0,5,1):
     else:
         ax[1].plot(SC4_dtvpge_mean[i,:pld], x_stag[:pld], label=label[i], linestyle=linestyle[i], color=colors[i], lw=linewidth[i])
 
-ax[1].legend()
+ax[1].legend(fontsize = 21)
 ax[1].set_xlabel("Mean DTVPGE [Pa/cm]")
 ax[1].invert_yaxis()
+ax[1].set_yticklabels([])
 ax[1].grid(alpha=0.5)
 ax[1].xaxis.set_label_position('top')
 ax[1].xaxis.tick_top()
-ax[1].text(0.91, 0.05, "b",  
+ax[1].text(0.906, 0.065, "b",  
            transform=ax[1].transAxes,
            verticalalignment='top', 
            horizontalalignment='left', 
@@ -981,11 +981,13 @@ ax[2].invert_yaxis()
 ax[2].grid(alpha=0.5)
 ax[2].xaxis.set_label_position('top')
 ax[2].xaxis.tick_top()
-ax[2].text(0.915, 0.05, "c",  
+ax[2].text(0.914, 0.065, "c",  
            transform=ax[2].transAxes,
            verticalalignment='top', 
            horizontalalignment='left', 
            bbox=dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.3'))
+
+# plt.savefig('Fig 7.png', dpi = 900)
 #%%
 #Spin up temp profiles
 fig, ax = plt.subplots(figsize = (9, 6))
@@ -1018,14 +1020,14 @@ colors = colors[-4:] + colors [:-4]
 
 plt.figure(figsize=(9, 6))
 plt.rcParams.update({'font.size': 22})
-plt.plot(y_hours, dtvpge[0,:], label='0 - 0.5 cm', lw=2.5)#, color = colors[0])            # , Surface
-plt.plot(y_hours, dtvpge[3,:], label='1.5 - 2 cm', lw=2.5)#, color = colors[1])            #, shows how fast dtvpge decreases
+plt.plot(y_hours, dtvpge[0,:], label='0 - 0.5 cm', lw=4)#, color = colors[0])            # , Surface
+plt.plot(y_hours, dtvpge[3,:], label='1.5 - 2 cm', lw=4)#, color = colors[1])            #, shows how fast dtvpge decreases
 # plt.plot(y_hours, dtvpge[4,:], label='20 - 25 mm, first depth positive dtvpge appears', lw=2)
 # plt.plot(y_hours, dtvpge[5,:], label='25 - 30 mm', lw=2)
-plt.plot(y_hours, dtvpge[9,:], label='4.5 - 5 cm', lw=2.5)#, color = colors[2])                         #  , first crossing of 0'
-plt.plot(y_hours, dtvpge[14,:], label='7 - 7.5 cm', lw=2.5)#, color = colors[3])                       # , positive peak
+plt.plot(y_hours, dtvpge[9,:], label='4.5 - 5 cm', lw=4)#, color = colors[2])                         #  , first crossing of 0'
+plt.plot(y_hours, dtvpge[14,:], label='7 - 7.5 cm', lw=4)#, color = colors[3])                       # , positive peak
 # plt.plot(y_hours, dtvpge[24,:], label='120 - 125 mm, second crossing of 0', lw=2)
-plt.plot(y_hours, dtvpge[36,:], label='18 - 18.5 cm', lw=2.5)#, color = colors[4])                  #, lower negative peak
+plt.plot(y_hours, dtvpge[36,:], label='18 - 18.5 cm', lw=4)#, color = colors[4])                  #, lower negative peak
 # plt.plot(y_hours, dtvpge[59,:], label='295 - 300 mm, below here only 0', lw=2)
 plt.title('')
 plt.xlabel('Time [hours')
@@ -1037,7 +1039,7 @@ plt.xticks([0,6,12,18,24,30,36,42,48])
 plt.tight_layout()
 plt.show()
 
-# plt.savefig('Fig 6A1.png', dpi = 900)
+plt.savefig('Fig 6A1.png', dpi = 900)
 #%%
 plt.figure(figsize = (9,6))
 plt.imshow(dtvpge, #vmin = -25, vmax = 25,
